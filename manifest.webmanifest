@@ -1,13 +1,16 @@
 {
-  "name": "Mi Presupuesto",
-  "short_name": "Presupuesto",
-  "description": "Presupuesto personal simple y local.",
+  "name": "Mi Presupuesto - Gaachinte Finanzas",
+  "short_name": "Mi Presupuesto",
+  "description": "Presupuesto personal simple, local y portable.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f5f5f7",
-  "theme_color": "#4f4a68",
+  "orientation": "portrait",
+  "background_color": "#f5f4f7",
+  "theme_color": "#123f50",
   "lang": "es-CO",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    {"src":"icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
   ]
 }

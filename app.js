@@ -10,6 +10,7 @@ let currentMonth = '2026-09';
 let analyticsYear = 2026;
 let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
+let expenseOrganizeMode = false;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -108,6 +109,7 @@ function bindEvents() {
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
   $('#settingsBtn').onclick=openSettings;
+  $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
@@ -157,6 +159,7 @@ function moveExpenseSubcategory(category,subcategory,direction){
   [order[i],order[j]]=[order[j],order[i]]; state.expenseSubcategoryOrder[category]=order; save(); renderExpenses();
 }
 
+function toggleExpenseOrganize(){expenseOrganizeMode=!expenseOrganizeMode;renderExpenses();toast(expenseOrganizeMode?'Modo organización activado':'Orden guardado');}
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
 function renderMonthLabels(){$('#currentMonthLabel').textContent=monthLabel(currentMonth);$('#expenseMonthLabel').textContent=monthLabel(currentMonth);$('#savingsMonthLabel').textContent=monthLabel(currentMonth);$('#incomeMonthLabel').textContent=monthLabel(currentMonth);}
 function renderHome(){
@@ -178,6 +181,8 @@ function deleteIncome(id_){if(!confirm('¿Eliminar este ingreso y sus valores?')
 function openAddIncome(){openForm('Nuevo ingreso',[{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Salario AEI'}],val=>{state.incomeItems.push({id:id('inc'),name:val.name.trim()||'Nuevo ingreso',monthly:{}});save();render();toast('Ingreso creado');});}
 
 function renderExpenses(){
+  document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
+  const organizeBtn=$('#toggleExpenseOrganize'); if(organizeBtn){organizeBtn.textContent=expenseOrganizeMode?'✓ Terminar organización':'↕ Organizar'; organizeBtn.classList.toggle('organize-active',expenseOrganizeMode);}
   const wrap=$('#expenseRows');
   const cats=orderedExpenseCategories();
   wrap.innerHTML=cats.map((cat,catIndex)=>{
@@ -188,8 +193,8 @@ function renderExpenses(){
       <div class="category-header">
         <div class="category-heading-info"><div class="category-title">${esc(cat)}</div><div class="category-total">${money(catTotal)}</div></div>
         <div class="category-header-actions">
-          <button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button>
-          <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button>
+          <button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button>
+          <button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button>
           <button class="small-icon category-edit-btn" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-category" data-category="${escAttr(cat)}">✏️</button>
           <button class="small-icon add-sub-btn" title="Agregar subcategoría a ${escAttr(cat)}" aria-label="Agregar subcategoría" data-action="add-subcategory" data-category="${escAttr(cat)}">＋</button>
         </div>
@@ -206,8 +211,8 @@ function expenseItemHTML(x,index,total,category){
     <div class="row-top">
       <div class="row-title"><strong>${esc(x.subcategory)}</strong><small>Año: ${money(annualTotal(x))}</small></div>
       <div class="row-actions">
-        <button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.subcategory)}" ${canUp?'':'disabled'}>↑</button>
-        <button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.subcategory)}" ${canDown?'':'disabled'}>↓</button>
+        <button class="order-text-btn organize-only" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.subcategory)}" ${canUp?'':'disabled'}>↑</button>
+        <button class="order-text-btn organize-only" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.subcategory)}" ${canDown?'':'disabled'}>↓</button>
         <button class="small-icon" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" data-action="edit-expense" data-id="${escAttr(x.id)}">✏️</button>
         <button class="small-icon" title="Eliminar" aria-label="Eliminar gasto" data-action="delete-expense" data-id="${escAttr(x.id)}">🗑️</button>
       </div>
@@ -472,6 +477,6 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.copyPreviousSavings=copyPreviousSavings;
+window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;
 
 boot();

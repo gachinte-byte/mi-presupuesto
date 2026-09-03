@@ -10,3 +10,11 @@
 /* V9: controles de orden visibles y táctiles en Gastos */
 .order-text-btn{min-width:34px;height:34px;padding:0 8px;border:1px solid #d8d5df;border-radius:9px;background:#fff;color:var(--purple);font-size:18px;font-weight:900;cursor:pointer;line-height:1;touch-action:manipulation}.order-text-btn:disabled{opacity:.25;cursor:default}.category-header-actions,.row-actions{align-items:center}.category-header-actions{gap:5px}.expense-item .row-actions{gap:5px}.category-header{gap:8px}.category-heading-info{flex:1}.order-text-btn:not(:disabled):active{transform:scale(.95);background:#efedf4}
 @media(max-width:420px){.category-header{padding:11px 10px}.category-header-actions{gap:3px}.order-text-btn{min-width:32px;height:32px;font-size:17px;padding:0 6px}.category-items{padding:0 10px}.expense-item .row-actions{gap:3px}.expense-item .small-icon{width:32px;height:32px}}
+
+/* Modo organización: las flechas solo aparecen cuando el usuario lo activa. */
+.organize-only{display:none !important;}
+body.expense-organizing .organize-only{display:inline-flex !important;}
+.organize-active{font-weight:700;}
+
+.title-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+@media (max-width:520px){.title-actions{width:100%;}.title-actions button{flex:1;}}

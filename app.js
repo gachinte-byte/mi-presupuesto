@@ -20,7 +20,15 @@ function monthLabel(key) { const [y,m] = key.split('-').map(Number); return `${m
 function shiftMonth(key, delta) { const [y,m] = key.split('-').map(Number); const d = new Date(y, m-1 + delta, 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
 function yearMonths(year) { return Array.from({length:12},(_,i)=>`${year}-${String(i+1).padStart(2,'0')}`); }
 function money(value, currency='COP') { const n = Number(value || 0); return new Intl.NumberFormat('es-CO',{style:'currency',currency,maximumFractionDigits:0}).format(n); }
-function numberValue(value) { return Number(String(value ?? '').replace(/[^0-9.-]/g,'')) || 0; }
+function numberValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return 0;
+  // Los campos de dinero usan punto como separador de miles (ej. 935.000).
+  // Al editar, quitamos los separadores antes de convertir a número para
+  // evitar que JavaScript interprete 935.000 como 935.
+  const normalized = text.replace(/[^0-9-]/g, '');
+  return Number(normalized) || 0;
+}
 function formatNumber(value) { const n=numberValue(value); return n===0 ? '0' : new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n); }
 function focusNumberInput(el){ if(!el)return; const raw=numberValue(el.value); el.value=raw===0?'':String(raw); }
 function blurNumberInput(el){ if(!el)return; el.value=formatNumber(el.value); }

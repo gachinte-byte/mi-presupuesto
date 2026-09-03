@@ -95,18 +95,63 @@ function renderExpenses(){
   const wrap=$('#expenseRows');const cats=categories();
   wrap.innerHTML=cats.map(cat=>{
     const items=state.expenseItems.filter(x=>x.category===cat);const catTotal=items.reduce((s,x)=>s+getMonthValue(x,currentMonth),0);
-    return `<section class="expense-category-card"><div class="category-header"><div><div class="category-title">${esc(cat)}</div><div class="category-total">${money(catTotal)}</div></div><button class="small-icon add-sub-btn" title="Agregar subcategoría" onclick="openAddExpense(${JSON.stringify(cat)})">＋</button></div><div class="category-items">${items.map(x=>expenseItemHTML(x)).join('')}</div></section>`;
+    return `<section class="expense-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div><div class="category-total">${money(catTotal)}</div></div><div class="category-header-actions"><button class="small-icon category-edit-btn" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" onclick="editCategory(${JSON.stringify(cat)})">✏️</button><button class="small-icon add-sub-btn" title="Agregar subcategoría a ${escAttr(cat)}" aria-label="Agregar subcategoría" onclick="openAddExpense(${JSON.stringify(cat)})">＋</button></div></div><div class="category-items">${items.map(x=>expenseItemHTML(x)).join('')}</div></section>`;
   }).join('')||'<div class="empty">Agrega tu primer gasto.</div>';
   $('#expensesViewTotal').textContent=money(totals().expenses);
 }
-function expenseItemHTML(x){const val=getMonthValue(x,currentMonth);return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.subcategory)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editExpense('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteExpense('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val||''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)"></div>`;}
+function expenseItemHTML(x){const val=getMonthValue(x,currentMonth);return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.subcategory)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" onclick="editExpense('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" aria-label="Eliminar gasto" onclick="deleteExpense('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val||''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)"></div>`;}
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
+function editCategory(category){
+  openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{
+    const newName=val.name.trim();
+    if(!newName){alert('Escribe un nombre para la categoría.');return;}
+    if(newName===category){closeModal();return;}
+    const exists=categories().some(c=>c.toLowerCase()===newName.toLowerCase() && c!==category);
+    if(exists){alert('Ya existe una categoría con ese nombre.');return;}
+    state.expenseItems.forEach(x=>{if(x.category===category)x.category=newName;});
+    save();render();toast('Categoría renombrada');
+  });
+}
 function editExpense(id_){
   const x=state.expenseItems.find(i=>i.id===id_);if(!x)return;
-  openExpenseForm('Editar gasto',x.category,x.subcategory,(category,subcategory)=>{x.category=category;x.subcategory=subcategory;save();render();toast('Gasto actualizado');});
+  openSubcategoryForm('Editar subcategoría',x.category,x.subcategory,(subcategory)=>{
+    const newName=subcategory.trim();
+    if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
+    const duplicate=state.expenseItems.some(i=>i.id!==x.id && i.category===x.category && i.subcategory.toLowerCase()===newName.toLowerCase());
+    if(duplicate){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
+    x.subcategory=newName;save();render();toast('Subcategoría renombrada');return true;
+  });
 }
 function deleteExpense(id_){if(!confirm('¿Eliminar este gasto y sus valores?'))return;state.expenseItems=state.expenseItems.filter(x=>x.id!==id_);save();render();}
-function openAddExpense(category=''){openExpenseForm('Nuevo gasto',category,'',(cat,sub)=>{state.expenseItems.push({id:id('exp'),category:cat,subcategory:sub,monthly:{}});save();render();toast('Gasto creado');});}
+function openAddExpense(category=''){
+  if(category){
+    openSubcategoryForm('Nueva subcategoría',category,'',(subcategory)=>{
+      const newName=subcategory.trim();
+      if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
+      const duplicate=state.expenseItems.some(i=>i.category===category && i.subcategory.toLowerCase()===newName.toLowerCase());
+      if(duplicate){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
+      state.expenseItems.push({id:id('exp'),category,subcategory:newName,monthly:{}});save();render();toast('Subcategoría creada');return true;
+    });
+    return;
+  }
+  openExpenseForm('Nuevo gasto','','',(cat,sub)=>{state.expenseItems.push({id:id('exp'),category:cat,subcategory:sub,monthly:{}});save();render();toast('Gasto creado');});
+}
+function openSubcategoryForm(title,category,initialSubcategory,onSubmit){
+  $('#modal').innerHTML=`<h3>${esc(title)}</h3>
+    <form id="subcategoryForm">
+      <div class="form-field"><label>Categoría</label><div class="category-form-display">${esc(category)}</div></div>
+      <div class="form-field"><label>${title==='Nueva subcategoría'?'Nombre de la subcategoría':'Nombre de la subcategoría'}</label><input class="input" id="subcategoryNameInput" name="subcategory" value="${escAttr(initialSubcategory)}" placeholder="Ej. Restaurantes" autocomplete="off"></div>
+      <p class="helper">${title==='Nueva subcategoría'?'Esta subcategoría quedará dentro de la categoría seleccionada.':'Aquí solo cambias el nombre de la subcategoría. La categoría no se modifica.'}</p>
+      <div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">${title==='Nueva subcategoría'?'Crear subcategoría':'Guardar cambios'}</button></div>
+    </form>`;
+  $('#modalBackdrop').classList.remove('hidden');
+  $('#subcategoryForm').onsubmit=e=>{
+    e.preventDefault();
+    const ok=onSubmit($('#subcategoryNameInput').value);
+    if(ok!==false)closeModal();
+  };
+  setTimeout(()=>$('#subcategoryNameInput').focus(),50);
+}
 
 function openExpenseForm(title, initialCategory='', initialSubcategory='', onSubmit){
   const cats=categories();
@@ -185,7 +230,7 @@ function escAttr(s){return esc(s).replace(/`/g,'&#96;');}
 function registerSW(){if('serviceWorker' in navigator && location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});}
 
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
-window.updateExpense=updateExpense;window.editExpense=editExpense;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
+window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.resetLocal=resetLocal;window.saveRate=saveRate;
 

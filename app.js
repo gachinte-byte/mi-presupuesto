@@ -48,6 +48,15 @@ async function boot() {
 }
 
 function bindEvents() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === 'edit-category') editCategory(btn.dataset.category);
+    if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
+    if (action === 'edit-expense') editExpense(btn.dataset.id);
+    if (action === 'delete-expense') deleteExpense(btn.dataset.id);
+  });
   $$('.nav-item').forEach(btn=>btn.addEventListener('click',()=>showView(btn.dataset.view)));
   $$('[data-go]').forEach(btn=>btn.addEventListener('click',()=>showView(btn.dataset.go)));
   $('#prevMonth').onclick=()=>changeMonth(-1); $('#nextMonth').onclick=()=>changeMonth(1);
@@ -95,11 +104,11 @@ function renderExpenses(){
   const wrap=$('#expenseRows');const cats=categories();
   wrap.innerHTML=cats.map(cat=>{
     const items=state.expenseItems.filter(x=>x.category===cat);const catTotal=items.reduce((s,x)=>s+getMonthValue(x,currentMonth),0);
-    return `<section class="expense-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div><div class="category-total">${money(catTotal)}</div></div><div class="category-header-actions"><button class="small-icon category-edit-btn" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" onclick="editCategory(${JSON.stringify(cat)})">✏️</button><button class="small-icon add-sub-btn" title="Agregar subcategoría a ${escAttr(cat)}" aria-label="Agregar subcategoría" onclick="openAddExpense(${JSON.stringify(cat)})">＋</button></div></div><div class="category-items">${items.map(x=>expenseItemHTML(x)).join('')}</div></section>`;
+    return `<section class="expense-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div><div class="category-total">${money(catTotal)}</div></div><div class="category-header-actions"><button class="small-icon category-edit-btn" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-category" data-category="${escAttr(cat)}">✏️</button><button class="small-icon add-sub-btn" title="Agregar subcategoría a ${escAttr(cat)}" aria-label="Agregar subcategoría" data-action="add-subcategory" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map(x=>expenseItemHTML(x)).join('')}</div></section>`;
   }).join('')||'<div class="empty">Agrega tu primer gasto.</div>';
   $('#expensesViewTotal').textContent=money(totals().expenses);
 }
-function expenseItemHTML(x){const val=getMonthValue(x,currentMonth);return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.subcategory)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" onclick="editExpense('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" aria-label="Eliminar gasto" onclick="deleteExpense('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val||''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)"></div>`;}
+function expenseItemHTML(x){const val=getMonthValue(x,currentMonth);return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.subcategory)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" data-action="edit-expense" data-id="${escAttr(x.id)}">✏️</button><button class="small-icon" title="Eliminar" aria-label="Eliminar gasto" data-action="delete-expense" data-id="${escAttr(x.id)}">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val||''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)"></div>`;}
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
 function editCategory(category){
   openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{

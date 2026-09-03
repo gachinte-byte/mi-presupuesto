@@ -142,6 +142,7 @@ function bindEvents() {
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
+  document.addEventListener('click',handleChartClick);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
   $('#toggleSavingsOrganize').onclick=toggleSavingsOrganize;
@@ -449,7 +450,6 @@ function renderAnalytics(){
   const expSeries=annualExpenseCategories(analyticsYear);
   const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0),0);
   $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);
-  $('#chartExpensesYear').textContent=money(annualExpenseTotal);
   $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
   renderWealthLegend(wealth);
   renderAssetSelector();
@@ -460,18 +460,26 @@ function renderAnalytics(){
 
   renderExpenseSelector(expSeries);
   const totalSeries={category:'Total gastos',values:yearMonths(analyticsYear).map(m=>state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0))};
-  if(selectedExpenseCategory==='total'){
+  const labelEl=$('#chartExpensesYearLabel');
+  if(selectedExpenseCategory==='all'){
+    $('#chartExpensesYear').textContent=money(annualExpenseTotal);
+    labelEl.textContent='Total de gastos del año';
+    $('#expenseChart').innerHTML=pieChart(expSeries);
+  }else if(selectedExpenseCategory==='total'){
+    $('#chartExpensesYear').textContent=money(annualExpenseTotal);
+    labelEl.textContent='Total de gastos del año';
     $('#expenseChart').innerHTML=lineChart(monthShort,totalSeries.values,'Total gastos');
-  }else if(selectedExpenseCategory!=='all'){
+  }else{
     const selected=expSeries.find(s=>s.category===selectedExpenseCategory);
+    const selectedTotal=selected ? selected.values.reduce((sum,v)=>sum+v,0) : annualExpenseTotal;
+    $('#chartExpensesYear').textContent=money(selectedTotal);
+    labelEl.textContent=selected ? `Gastos de ${selected.category} en el año` : 'Total de gastos del año';
     $('#expenseChart').innerHTML=selected
       ? lineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
       : lineChart(monthShort,totalSeries.values,'Total gastos');
-  }else{
-    $('#expenseChart').innerHTML=multiLineChart(monthShort,expSeries);
   }
   $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
-    ? expSeries.map((s,i)=>`<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)}</span>`).join('')||'<span>Sin gastos registrados en este año.</span>'
+    ? expSeries.map((s,i)=>{const total=s.values.reduce((sum,v)=>sum+v,0);const share=annualExpenseTotal?Math.round(total/annualExpenseTotal*100):0;return `<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)} · ${money(total)} (${share}%)</span>`;}).join('')||'<span>Sin gastos registrados en este año.</span>'
     : `<span><i class="legend-dot"></i>${esc(selectedExpenseCategory==='total'?'Total gastos':selectedExpenseCategory)}</span>`;
 }
 function renderExpenseSelector(expSeries){
@@ -543,6 +551,29 @@ function lineChart(labels,values,title){
   const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
+function pieChart(series){
+  const rows=series.map(s=>({name:s.category,value:s.values.reduce((sum,v)=>sum+v,0)})).filter(x=>x.value>0);
+  if(!rows.length)return '<div class="empty">Sin gastos registrados en este año.</div>';
+  const total=rows.reduce((sum,x)=>sum+x.value,0);
+  const W=760,H=340,cx=260,cy=170,r=118,inner=62;
+  let angle=-Math.PI/2;
+  const paths=[];
+  rows.forEach((row,i)=>{
+    const start=angle, end=angle+(row.value/total)*Math.PI*2;
+    const large=end-start>Math.PI?1:0;
+    const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
+    const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
+    const ix2=cx+inner*Math.cos(end),iy2=cy+inner*Math.sin(end);
+    const ix1=cx+inner*Math.cos(start),iy1=cy+inner*Math.sin(start);
+    const d=`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`;
+    const pct=Math.round(row.value/total*100);
+    paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="pie-slice chart-hit" data-label="${escAttr(row.name)}" data-value="${escAttr(money(row.value))} · ${pct}%"><title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title></path>`);
+    angle=end;
+  });
+  const legend=rows.map((row,i)=>{const pct=Math.round(row.value/total*100);return `<div class="pie-legend-row"><span><i style="background:${chartPalette[i%chartPalette.length]}"></i><strong>${esc(row.name)}</strong></span><b>${money(row.value)}</b><small>${pct}%</small></div>`;}).join('');
+  return `<div class="pie-chart-wrap"><div class="chart-svg-wrap pie-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría"><g>${paths.join('')}</g><text x="${cx}" y="${cy-2}" text-anchor="middle" class="pie-center-total">${esc(money(total))}</text><text x="${cx}" y="${cy+18}" text-anchor="middle" class="pie-center-label">Total año</text></svg></div><div class="pie-legend">${legend}</div></div>`;
+}
+
 function multiLineChart(labels,series){
   if(!series.length)return '<div class="empty">Sin gastos registrados en este año.</div>';
   const all=series.flatMap(s=>s.values);const W=760,H=330,g=chartGeometry(all,W,H);
@@ -569,8 +600,22 @@ function positionChartTooltip(e,tip,wrap){
 }
 function handleChartPointerOut(e){
   const from=e.target.closest?.('.chart-hit');if(!from)return;
+  if(from.dataset.pinned==='1')return;
   const to=e.relatedTarget?.closest?.('.chart-hit');if(to===from)return;
   const wrap=from.closest('.chart-svg-wrap');wrap?.querySelector('.chart-tooltip')?.classList.remove('show');
+}
+function handleChartClick(e){
+  const dot=e.target.closest?.('.chart-hit');
+  if(dot){
+    e.stopPropagation();
+    const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(!tip)return;
+    wrap?.querySelectorAll('.chart-hit[data-pinned="1"]').forEach(d=>{d.dataset.pinned='0';});
+    dot.dataset.pinned='1';
+    tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');positionChartTooltip(e,tip,wrap);
+    return;
+  }
+  document.querySelectorAll('.chart-hit[data-pinned="1"]').forEach(d=>{d.dataset.pinned='0';});
+  document.querySelectorAll('.chart-tooltip.show').forEach(t=>t.classList.remove('show'));
 }
 
 function openForm(title,fields,onSubmit){

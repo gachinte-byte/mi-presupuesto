@@ -35,3 +35,9 @@ body.expense-organizing .organize-only,body.savings-organizing .organize-only{di
 .pie-legend-row b{font-size:10px;color:var(--navy);white-space:nowrap}
 .pie-legend-row small{font-size:9px;min-width:28px;text-align:right}
 @media (max-width:680px){.pie-chart-wrap{grid-template-columns:1fr}.pie-svg-wrap{max-height:300px}.pie-legend{padding:2px 8px 6px}}
+
+/* V16: cuentas de Ahorros que se monitorean desde Inicio */
+.home-watch-btn{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff;color:#9a96a4;font-size:18px;font-weight:900;cursor:pointer;line-height:1;touch-action:manipulation}
+.home-watch-btn.is-on{color:var(--green);background:#eef8f3;border-color:#cde7da}
+.home-watch-btn:active{transform:scale(.95)}
+.settings-block{display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fbfafc}.settings-block strong{font-size:14px;color:var(--navy)}.settings-block .helper{margin:0 0 2px}.settings-block+.settings-block{margin-top:10px}.settings-list{display:flex;flex-direction:column;gap:10px}.settings-list button{font:inherit}

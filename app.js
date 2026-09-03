@@ -69,6 +69,19 @@ function normalize(data) {
     if (x.subcategory === '[object PointerEvent]' || x.subcategory === '[object Event]') x.subcategory = 'Nuevo gasto';
     if (x.name === '[object PointerEvent]' || x.name === '[object Event]') x.name = 'Nueva cuenta';
   }
+  // Selección de cuentas que se muestran en Inicio. Para datos existentes,
+  // conservamos la vista anterior: las primeras 5 cuentas con saldo quedan
+  // activadas si todavía no existe ninguna preferencia guardada.
+  if (data.assetItems.length && data.assetItems.every(x => typeof x.homeVisible !== 'boolean')) {
+    let shown = 0;
+    data.assetItems.forEach(x => {
+      const hasBalance = Object.values(x.monthly || {}).some(v => Number(v || 0) !== 0);
+      x.homeVisible = hasBalance && shown < 5;
+      if (x.homeVisible) shown++;
+    });
+  } else {
+    data.assetItems.forEach(x => { if (typeof x.homeVisible !== 'boolean') x.homeVisible = false; });
+  }
   const existingAssetCategories = [...new Set(data.assetItems.map(x => x.category).filter(Boolean))];
   const validAssetCategoryOrder = data.assetCategoryOrder.filter(c => existingAssetCategories.includes(c));
   existingAssetCategories.forEach(c => { if (!validAssetCategoryOrder.includes(c)) validAssetCategoryOrder.push(c); });
@@ -114,6 +127,7 @@ function bindEvents() {
     if (action === 'move-subcategory-down') moveExpenseSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
     if (action === 'move-subcategory-category') openMoveExpense(btn.dataset.id);
     if (action === 'move-asset-subcategory-category') openMoveAsset(btn.dataset.id);
+    if (action === 'toggle-asset-home') toggleAssetHome(btn.dataset.id);
     if (action === 'move-asset-category-up') moveAssetCategory(btn.dataset.category,-1);
     if (action === 'move-asset-category-down') moveAssetCategory(btn.dataset.category,1);
     if (action === 'move-asset-subcategory-up') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
@@ -279,7 +293,7 @@ function renderHome(){
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);
   $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
   const cats=categoryTotals(),max=cats[0]?.[1]||1;$('#homeExpenseList').innerHTML=cats.map(([name,v])=>`<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="category-bar"><span style="width:${Math.round(v/max*100)}%"></span></div></div><div class="category-value">${money(v)}</div></div>`).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
-  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=state.assetItems.filter(x=>getMonthValue(x,currentMonth)!==0).slice(0,5);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${x.category}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Actualiza tus saldos en Ahorros.</div>';
+  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=state.assetItems.filter(x=>x.homeVisible===true);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${x.category}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';
 }
 function miniRow(a,b){return `<div class="mini-row"><span>${esc(a)}</span><strong>${b}</strong></div>`;}
 
@@ -433,7 +447,8 @@ function renderAssets(){
   }).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
   const a=assetTotals();$('#copTotal').textContent=money(a.cop);$('#usdTotal').textContent=money(a.usd,'USD');
 }
-function assetItemHTML(x,index,total,category){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);const canUp=index>0,canDown=index<total-1;return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="order-text-btn organize-only" title="Mover cuenta arriba" aria-label="Mover cuenta arriba" data-action="move-asset-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover cuenta abajo" aria-label="Mover cuenta abajo" data-action="move-asset-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canDown?'':'disabled'}>↓</button><button class="order-text-btn organize-only" title="Mover a otra categoría" aria-label="Mover a otra categoría" data-action="move-asset-subcategory-category" data-id="${escAttr(x.id)}">↗</button><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
+function assetItemHTML(x,index,total,category){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);const canUp=index>0,canDown=index<total-1;const eye=x.homeVisible===true?'👁️':'○';const eyeLabel=x.homeVisible===true?'Ocultar de Inicio':'Mostrar en Inicio';return `<div class="expense-item asset-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="home-watch-btn ${x.homeVisible===true?'is-on':''}" title="${eyeLabel}" aria-label="${eyeLabel}" data-action="toggle-asset-home" data-id="${escAttr(x.id)}">${eye}</button><button class="order-text-btn organize-only" title="Mover cuenta arriba" aria-label="Mover cuenta arriba" data-action="move-asset-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover cuenta abajo" aria-label="Mover cuenta abajo" data-action="move-asset-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canDown?'':'disabled'}>↓</button><button class="order-text-btn organize-only" title="Mover a otra categoría" aria-label="Mover a otra categoría" data-action="move-asset-subcategory-category" data-id="${escAttr(x.id)}">↗</button><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
+function toggleAssetHome(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;x.homeVisible=x.homeVisible!==true;save();render();toast(x.homeVisible?'Cuenta agregada a Inicio':'Cuenta retirada de Inicio');}
 function updateAsset(id_,raw){const x=state.assetItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Saldo actualizado');}}
 function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:x.category},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],val=>{const oldCategory=x.category,oldName=x.name;x.category=val.category.trim()||x.category;x.name=val.name.trim()||x.name;x.currency=val.currency;state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(x.category))state.assetCategoryOrder.push(x.category);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[oldCategory] ||= [];state.assetSubcategoryOrder[oldCategory]=state.assetSubcategoryOrder[oldCategory].filter(n=>n!==oldName);state.assetSubcategoryOrder[x.category] ||= [];if(!state.assetSubcategoryOrder[x.category].includes(x.name))state.assetSubcategoryOrder[x.category].push(x.name);save();render();toast('Cuenta actualizada');});}
 function editAssetCategory(category){openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{const newName=val.name.trim();if(!newName||newName===category)return;if(orderedAssetCategories().some(c=>c.toLowerCase()===newName.toLowerCase()&&c!==category)){alert('Ya existe una categoría con ese nombre.');return;}state.assetItems.forEach(x=>{if(x.category===category)x.category=newName;});state.assetCategoryOrder=(state.assetCategoryOrder||[]).map(c=>c===category?newName:c);state.assetSubcategoryOrder ||= {};if(state.assetSubcategoryOrder[category]){state.assetSubcategoryOrder[newName]=state.assetSubcategoryOrder[category];delete state.assetSubcategoryOrder[category];}save();render();toast('Categoría renombrada');});}
@@ -622,9 +637,99 @@ function openForm(title,fields,onSubmit){
   const formId='dynamicForm';$('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="${formId}">${fields.map(f=>`<div class="form-field"><label>${esc(f.name)}</label>${f.type==='select'?`<select class="select" name="${f.key}">${f.options.map(o=>`<option ${o===f.value?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input class="input ${f.type==='number'?'number-format':''}" name="${f.key}" type="${f.type||'text'}" value="${escAttr(f.type==='number' && f.value ? formatNumber(f.value) : (f.value||''))}" placeholder="${escAttr(f.placeholder||'')}" required>`}</div>`).join('')}<div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');$('#'+formId).onsubmit=e=>{e.preventDefault();const val=Object.fromEntries(new FormData(e.target).entries());onSubmit(val);closeModal();};setTimeout(()=>$('#'+formId)?.querySelector('input,select')?.focus(),50);
 }
+
+/* ---------- EXCEL: exportación/importación por mes ---------- */
+function xmlEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');}
+function colName(n){let s='';while(n>0){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26);}return s;}
+function excelCell(value, row, col, style){
+  const ref=colName(col)+row;
+  if(typeof value==='number' && Number.isFinite(value)) return `<c r="${ref}"${style?` s="${style}"`:''}><v>${value}</v></c>`;
+  return `<c r="${ref}" t="inlineStr"${style?` s="${style}"`:''}><is><t xml:space="preserve">${xmlEsc(value??'')}</t></is></c>`;
+}
+function excelSheet(rows, widths=[]){
+  const cols=rows.reduce((m,r)=>Math.max(m,r.length),0);
+  const widthXml=Array.from({length:cols},(_,i)=>`<col min="${i+1}" max="${i+1}" width="${Math.min(42,Math.max(12,widths[i]||16))}" customWidth="1"/>`).join('');
+  const rowXml=rows.map((r,ri)=>`<row r="${ri+1}">${r.map((v,ci)=>excelCell(v,ri+1,ci+1,ri===0?2:(typeof v==='number'?1:undefined))).join('')}</row>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>${widthXml}</cols><sheetData>${rowXml}</sheetData></worksheet>`;
+}
+function crc32(bytes){let table=crc32.table;if(!table){table=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xedb88320^(c>>>1)):(c>>>1);table[n]=c>>>0;}crc32.table=table;}let c=0xffffffff;for(const b of bytes)c=table[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;}
+function u16(n){return new Uint8Array([n&255,(n>>>8)&255]);}
+function u32(n){return new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);}
+function concatBytes(parts){let len=parts.reduce((s,p)=>s+p.length,0),out=new Uint8Array(len),o=0;for(const p of parts){out.set(p,o);o+=p.length;}return out;}
+function zipStore(files){
+  const enc=new TextEncoder(), local=[], central=[]; let offset=0;
+  for(const f of files){
+    const name=enc.encode(f.name), data=typeof f.data==='string'?enc.encode(f.data):f.data, crc=crc32(data);
+    const lh=concatBytes([new Uint8Array([80,75,3,4]),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),name,data]);
+    local.push(lh);
+    const ch=concatBytes([new Uint8Array([80,75,1,2]),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset),name]);
+    central.push(ch); offset+=lh.length;
+  }
+  const centralData=concatBytes(central), localData=concatBytes(local);
+  const end=concatBytes([new Uint8Array([80,75,5,6]),u16(0),u16(0),u16(files.length),u16(files.length),u32(centralData.length),u32(localData.length),u16(0)]);
+  return concatBytes([localData,centralData,end]);
+}
+function excelXmlRows(rows){return rows.map(r=>r.map(v=>String(v??'')).join('\t')).join('\n');}
+function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),800);}
+function exportExcel(month=currentMonth){
+  month=month||currentMonth; const label=monthLabel(month); const total=totals(month); const assets=assetTotals(month);
+  const incomeRows=[['ID','Nombre','Valor'],...state.incomeItems.map(x=>[x.id,x.name,getMonthValue(x,month)])];
+  const expenseRows=[['ID','Categoria','Subcategoria','Valor'],...state.expenseItems.map(x=>[x.id,x.category,x.subcategory,getMonthValue(x,month)])];
+  const assetRows=[['ID','Categoria','Cuenta / inversión','Moneda','Saldo'],...state.assetItems.map(x=>[x.id,x.category,x.name,x.currency,getMonthValue(x,month)])];
+  const summaryRows=[['Concepto','Valor'],['Mes',label],['MesKey',month],['Ingresos',total.income],['Gastos',total.expenses],['Extra / deficit',total.extra],['Ahorros e inversiones COP',assets.cop],['Ahorros e inversiones USD',assets.usd],['Patrimonio equivalente COP',assets.totalCopEquivalent],['Tasa USD → COP',Number(state.settings.usdToCop||4000)]];
+  const controlRows=[['CAMPO','VALOR'],['Mes exportado',label],['MesKey',month],['INSTRUCCIÓN','En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, Categoria, Subcategoria, Nombre, Cuenta / inversión ni Moneda. Al importar, las categorías y nombres originales se conservarán.']];
+  const instrRows=[['MI PRESUPUESTO - ARCHIVO EXCEL'],['Archivo correspondiente al mes',label],['Qué puedes modificar','Solo los valores de las columnas Valor o Saldo.'],['Qué no debes modificar','ID, Categoria, Subcategoria, Nombre, Cuenta / inversión y Moneda.'],['Importación','La app usa el ID para devolver los valores al mes exportado y conserva las categorías originales.'],['Nota','Puedes abrir y editar este archivo en Excel y luego importarlo desde Configuración.']];
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${[1,2,3,4,5].map(i=>`<Override PartName="/xl/worksheets/sheet${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Control" sheetId="1" r:id="rId1"/><sheet name="Resumen" sheetId="2" r:id="rId2"/><sheet name="Ingresos" sheetId="3" r:id="rId3"/><sheet name="Gastos" sheetId="4" r:id="rId4"/><sheet name="Ahorros" sheetId="5" r:id="rId5"/></sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${[1,2,3,4,5].map(i=>`<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i}.xml"/>`).join('')}</Relationships>`},
+    {name:'xl/styles.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Aptos"/></font><font><b/><sz val="11"/><name val="Aptos"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0"/></cellXfs></styleSheet>`},
+    {name:'xl/worksheets/sheet1.xml',data:excelSheet(controlRows,[22,80])},
+    {name:'xl/worksheets/sheet2.xml',data:excelSheet(summaryRows,[34,24])},
+    {name:'xl/worksheets/sheet3.xml',data:excelSheet(incomeRows,[38,42,18])},
+    {name:'xl/worksheets/sheet4.xml',data:excelSheet(expenseRows,[38,28,46,18])},
+    {name:'xl/worksheets/sheet5.xml',data:excelSheet(assetRows,[38,28,46,12,18])}
+  ];
+  const bytes=zipStore(files); downloadBlob(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`mi-presupuesto-${month}.xlsx`); toast(`Excel de ${label} exportado`);
+}
+function u32read(d,o){return (d[o]|(d[o+1]<<8)|(d[o+2]<<16)|(d[o+3]<<24))>>>0;}
+function u16read(d,o){return d[o]|(d[o+1]<<8);}
+async function unzipEntries(arrayBuffer){
+  const d=new Uint8Array(arrayBuffer), decoder=new TextDecoder('utf-8'), entries=[]; let eocd=-1;
+  for(let i=d.length-22;i>=Math.max(0,d.length-66000);i--){if(u32read(d,i)===0x06054b50){eocd=i;break;}}
+  if(eocd<0)throw new Error('No es un XLSX válido'); const count=u16read(d,eocd+10), cdOffset=u32read(d,eocd+16); let p=cdOffset;
+  for(let n=0;n<count;n++){if(u32read(d,p)!==0x02014b50)throw new Error('ZIP inválido');const method=u16read(d,p+10),compSize=u32read(d,p+20),uncompSize=u32read(d,p+24),nameLen=u16read(d,p+28),extraLen=u16read(d,p+30),commentLen=u16read(d,p+32),localOffset=u32read(d,p+42),name=decoder.decode(d.slice(p+46,p+46+nameLen));const lp=localOffset, ln=u16read(d,lp+26),le=u16read(d,lp+28),dataStart=lp+30+ln+le,raw=d.slice(dataStart,dataStart+compSize);let data;if(method===0)data=raw;else if(method===8){if(typeof DecompressionStream==='undefined')throw new Error('Este navegador no puede descomprimir XLSX importados por Excel.');const stream=new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'));data=new Uint8Array(await new Response(stream).arrayBuffer());}else throw new Error('Compresión XLSX no compatible');entries.push({name,data,text:()=>decoder.decode(data)});p+=46+nameLen+extraLen+commentLen;}
+  return entries;
+}
+function xmlDoc(text){return new DOMParser().parseFromString(text,'application/xml');}
+function xmlText(el){return el?.textContent??'';}
+function sheetRows(xml,shared=[]){
+  const doc=xmlDoc(xml), rowNodes=[...doc.getElementsByTagNameNS('*','row')]; return rowNodes.map(row=>{
+    const out=[]; [...row.getElementsByTagNameNS('*','c')].forEach(c=>{const ref=c.getAttribute('r')||'',m=ref.match(/([A-Z]+)\d+/);let idx=0;if(m){for(const ch of m[1])idx=idx*26+(ch.charCodeAt(0)-64);idx--;}const t=c.getAttribute('t');let val='';if(t==='inlineStr')val=xmlText(c.getElementsByTagNameNS('*','t')[0]);else {const v=c.getElementsByTagNameNS('*','v')[0];val=xmlText(v);if(t==='s')val=shared[Number(val)]??'';else if(t==='b')val=val==='1';else if(val!==''&&!Number.isNaN(Number(val)))val=Number(val);}out[idx]=val;});return out;});
+}
+async function importExcel(file){
+  try{
+    const entries=await unzipEntries(await file.arrayBuffer()), byName=new Map(entries.map(e=>[e.name,e]));
+    const shared=byName.get('xl/sharedStrings.xml'); let sharedVals=[];
+    if(shared){const doc=xmlDoc(shared.text());sharedVals=[...doc.getElementsByTagNameNS('*','si')].map(si=>[...si.getElementsByTagNameNS('*','t')].map(t=>t.textContent).join(''));}
+    const workbook=byName.get('xl/workbook.xml'); if(!workbook)throw new Error('No se encontró el libro de Excel.');
+    const wdoc=xmlDoc(workbook.text()), sheets=[...wdoc.getElementsByTagNameNS('*','sheet')]; const rel=byName.get('xl/_rels/workbook.xml.rels'); if(!rel)throw new Error('Faltan relaciones del libro.');
+    const rdoc=xmlDoc(rel.text()); const relMap={}; [...rdoc.getElementsByTagNameNS('*','Relationship')].forEach(x=>relMap[x.getAttribute('Id')]=x.getAttribute('Target'));
+    const named={}; sheets.forEach(sh=>{const target=relMap[sh.getAttribute('r:id')];if(target)named[sh.getAttribute('name')]=byName.get(('xl/'+target).replace('xl/xl/','xl/'));});
+    const control=named.Control?sheetRows(named.Control.text(),sharedVals):[]; const controlObj=Object.fromEntries(control.slice(1).filter(r=>r.length>=2).map(r=>[String(r[0]),r[1]])); const month=String(controlObj.MesKey||'');
+    if(!/^\d{4}-\d{2}$/.test(month))throw new Error('No se encontró un MesKey válido en el archivo.');
+    const incRows=named.Ingresos?sheetRows(named.Ingresos.text(),sharedVals):[], expRows=named.Gastos?sheetRows(named.Gastos.text(),sharedVals):[], astRows=named.Ahorros?sheetRows(named.Ahorros.text(),sharedVals):[];
+    let changed=0, missing=0;
+    const updateRows=(rows,items,valueCol)=>{for(const r of rows.slice(1)){const item=items.find(x=>x.id===String(r[0]??''));if(!item){missing++;continue;}const v=Number(r[valueCol]??0);if(Number.isFinite(v)){setMonthValue(item,month,v);changed++;}}};
+    updateRows(incRows,state.incomeItems,2); updateRows(expRows,state.expenseItems,3); updateRows(astRows,state.assetItems,4);
+    currentMonth=month;analyticsYear=Number(month.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast(`Excel importado: ${changed} valores actualizados`); if(missing)toast(`${missing} filas del Excel no coincidieron con datos actuales`);
+  }catch(err){console.error(err);alert(`No se pudo importar el Excel. ${err.message||''}`);}
+}
+
 function openSettings(){
-  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list"><button onclick="exportJSON()">💾 Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div><p class="helper">Tus cambios se guardan solamente en este dispositivo mediante localStorage. Exporta un JSON si quieres llevar tus datos a otro celular, PC o tableta.</p><div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div><div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
-  $('#modalBackdrop').classList.remove('hidden');$('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};
+  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list"><div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes completo para revisarlo o modificar sus valores en Excel. Al volver a importarlo, la app conservará las categorías y nombres originales.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div><div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div><p class="helper">En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, categorías, subcategorías, nombres ni moneda. La importación usa el ID para actualizar el mes exportado.</p><div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div><div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
+  $('#modalBackdrop').classList.remove('hidden');$('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};$('#excelImportFile').onchange=e=>{const file=e.target.files[0];if(file)importExcel(file);};
 }
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
@@ -639,7 +744,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;
 
 boot();

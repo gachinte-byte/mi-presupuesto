@@ -9,6 +9,7 @@ let activeView = 'home';
 let currentMonth = '2026-09';
 let analyticsYear = 2026;
 let selectedAssetChart = 'total';
+let selectedExpenseCategory = 'all';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -81,6 +82,10 @@ function bindEvents() {
   $('#prevYear').onclick=()=>{analyticsYear--;renderAnalytics();};
   $('#nextYear').onclick=()=>{analyticsYear++;renderAnalytics();};
   $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
+  $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
+  document.addEventListener('pointerover',handleChartPointer);
+  document.addEventListener('pointerout',handleChartPointerOut);
+  document.addEventListener('pointermove',handleChartPointerMove);
   $('#settingsBtn').onclick=openSettings;
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
@@ -175,9 +180,9 @@ function openSubcategoryForm(title,category,initialSubcategory,onSubmit){
 }
 function openExpenseForm(title, initialCategory='', initialSubcategory='', onSubmit){
   const cats=categories();const safeInitialCat=cats.includes(initialCategory)?initialCategory:(initialCategory||'');const subOpts=safeInitialCat?subcategories(safeInitialCat):[];
-  $('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="expenseForm"><div class="form-field"><label>Categoría</label><select class="select" id="expenseCategorySelect" name="category"><option value="">Selecciona una categoría...</option>${cats.map(c=>`<option value="${escAttr(c)}" ${c===safeInitialCat?'selected':''}>${esc(c)}</option>`).join('')}<option value="__new__">＋ Crear nueva categoría</option></select></div><div class="form-field hidden" id="newCategoryField"><label>Nueva categoría</label><input class="input" id="newCategoryInput" placeholder="Ej. Ocio"></div><div class="form-field"><label>Subcategoría</label><select class="select" id="expenseSubcategorySelect" name="subcategory"><option value="">${safeInitialCat?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${subOpts.map(s=>`<option value="${escAttr(s)}" ${s===initialSubcategory?'selected':''}>${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option></select></div><div class="form-field hidden" id="newSubcategoryField"><label>Nueva subcategoría</label><input class="input" id="newSubcategoryInput" placeholder="Ej. Restaurantes"></div><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
+  $('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="expenseForm"><div class="form-field"><label>Categoría</label><select class="select" id="expenseFormCategorySelect" name="category"><option value="">Selecciona una categoría...</option>${cats.map(c=>`<option value="${escAttr(c)}" ${c===safeInitialCat?'selected':''}>${esc(c)}</option>`).join('')}<option value="__new__">＋ Crear nueva categoría</option></select></div><div class="form-field hidden" id="newCategoryField"><label>Nueva categoría</label><input class="input" id="newCategoryInput" placeholder="Ej. Ocio"></div><div class="form-field"><label>Subcategoría</label><select class="select" id="expenseSubcategorySelect" name="subcategory"><option value="">${safeInitialCat?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${subOpts.map(s=>`<option value="${escAttr(s)}" ${s===initialSubcategory?'selected':''}>${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option></select></div><div class="form-field hidden" id="newSubcategoryField"><label>Nueva subcategoría</label><input class="input" id="newSubcategoryInput" placeholder="Ej. Restaurantes"></div><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');
-  const catSel=$('#expenseCategorySelect'),subSel=$('#expenseSubcategorySelect');
+  const catSel=$('#expenseFormCategorySelect'),subSel=$('#expenseSubcategorySelect');
   catSel.onchange=()=>{const val=catSel.value;$('#newCategoryField').classList.toggle('hidden',val!=='__new__');const actual=val==='__new__'?'':val;const opts=actual?subcategories(actual):[];subSel.innerHTML=`<option value="">${actual?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${opts.map(s=>`<option value="${escAttr(s)}">${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option>`;$('#newSubcategoryField').classList.add('hidden');if(val==='__new__')setTimeout(()=>$('#newCategoryInput').focus(),30);};
   subSel.onchange=()=>{$('#newSubcategoryField').classList.toggle('hidden',subSel.value!=='__new__');if(subSel.value==='__new__')setTimeout(()=>$('#newSubcategoryInput').focus(),30);};
   $('#expenseForm').onsubmit=e=>{e.preventDefault();let category=catSel.value,sub=subSel.value;if(category==='__new__')category=$('#newCategoryInput').value.trim();if(sub==='__new__')sub=$('#newSubcategoryInput').value.trim();if(!category){alert('Selecciona o crea una categoría.');return;}if(!sub){alert('Selecciona o crea una subcategoría.');return;}if(state.expenseItems.some(x=>x.category.toLowerCase()===category.toLowerCase()&&x.subcategory.toLowerCase()===sub.toLowerCase())){alert('Esa subcategoría ya existe dentro de la categoría.');return;}onSubmit(category,sub);closeModal();};
@@ -212,6 +217,61 @@ function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus s
 function openAddAsset(){openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'text',placeholder:'Ej. FIDUCUENTA'},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],val=>{state.assetItems.push({id:id('ast'),category:val.category.trim()||'OTROS',name:val.name.trim()||'Nueva cuenta',currency:val.currency,monthly:{}});save();render();toast('Cuenta creada');});}
 
 /* ---------- ANALÍTICA ANUAL ---------- */
+function renderAnalytics(){
+  if(!$('#analyticsYearLabel'))return;
+  $('#analyticsYearLabel').textContent=analyticsYear;
+  const wealth=monthlyWealthSeries(analyticsYear);
+  const currentIndex=Math.min(11,Math.max(0,Number(currentMonth.slice(5,7))-1));
+  const current=Number(currentMonth.slice(0,4))===analyticsYear ? wealth[currentIndex] : wealth[11];
+  const expSeries=annualExpenseCategories(analyticsYear);
+  const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0),0);
+  $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);
+  $('#chartExpensesYear').textContent=money(annualExpenseTotal);
+  $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
+  renderWealthLegend(wealth);
+  renderAssetSelector();
+  const asset=state.assetItems.find(x=>x.id===selectedAssetChart);
+  $('#assetChart').innerHTML=asset
+    ? lineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`)
+    : '<div class="empty chart-note">Selecciona una cuenta para ver su evolución mensual.</div>';
+
+  renderExpenseSelector(expSeries);
+  const totalSeries={category:'Total gastos',values:yearMonths(analyticsYear).map(m=>state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0))};
+  if(selectedExpenseCategory==='total'){
+    $('#expenseChart').innerHTML=lineChart(monthShort,totalSeries.values,'Total gastos');
+  }else if(selectedExpenseCategory!=='all'){
+    const selected=expSeries.find(s=>s.category===selectedExpenseCategory);
+    $('#expenseChart').innerHTML=selected
+      ? lineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
+      : lineChart(monthShort,totalSeries.values,'Total gastos');
+  }else{
+    $('#expenseChart').innerHTML=multiLineChart(monthShort,expSeries);
+  }
+  $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
+    ? expSeries.map((s,i)=>`<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)}</span>`).join('')||'<span>Sin gastos registrados en este año.</span>'
+    : `<span><i class="legend-dot"></i>${esc(selectedExpenseCategory==='total'?'Total gastos':selectedExpenseCategory)}</span>`;
+}
+function renderExpenseSelector(expSeries){
+  const select=$('#analyticsExpenseCategorySelect');
+  if(!select)return;
+  const prev=selectedExpenseCategory;
+  select.innerHTML=`<option value="all">Todas las categorías</option><option value="total">Total gastos</option>${expSeries.map(s=>`<option value="${escAttr(s.category)}">${esc(s.category)}</option>`).join('')}`;
+  const valid=prev==='all'||prev==='total'||expSeries.some(s=>s.category===prev);
+  selectedExpenseCategory=valid?prev:'all';
+  select.value=selectedExpenseCategory;
+}
+function renderWealthLegend(wealth){
+  const first=wealth.find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;
+  const last=[...wealth].reverse().find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;
+  const diff=last-first;const arrow=diff>0?'↗':diff<0?'↘':'→';
+  $('#wealthLegend').innerHTML=`<span><i class="legend-dot"></i>Patrimonio total</span><span class="trend ${diff<0?'down':''}">${arrow} ${money(Math.abs(diff))} ${diff>=0?'de crecimiento':'de disminución'} en el año</span>`;
+}
+function renderAssetSelector(){
+  const select=$('#assetChartSelect');if(!select)return;
+  const prev=selectedAssetChart;
+  select.innerHTML=`<option value="total">Patrimonio total</option>${state.assetItems.map(x=>`<option value="${escAttr(x.id)}">${esc(x.name)} · ${esc(x.currency)}</option>`).join('')}`;
+  selectedAssetChart=state.assetItems.some(x=>x.id===prev)?prev:'total';select.value=selectedAssetChart;
+}
 function previousKnownAssetValue(asset, month){
   let m=month;
   for(let i=0;i<120;i++){
@@ -221,64 +281,73 @@ function previousKnownAssetValue(asset, month){
   return 0;
 }
 function assetValueForChart(asset, month){
-  if(hasOwnMonthValue(asset,month) && getMonthValue(asset,month)!==0) return getMonthValue(asset,month);
-  return previousKnownAssetValue(asset,shiftMonth(month,-1));
+  // No arrastramos saldos desde diciembre de un año anterior al gráfico.
+  // Dentro del mismo año, un saldo se mantiene hasta que se registre otro.
+  const year=Number(month.slice(0,4));
+  let m=month;
+  for(let i=0;i<12;i++){
+    if(Number(m.slice(0,4))!==year) break;
+    if(hasOwnMonthValue(asset,m)) return getMonthValue(asset,m);
+    m=shiftMonth(m,-1);
+  }
+  return 0;
 }
-function monthlyWealthSeries(year){
-  return yearMonths(year).map(month=>assetTotalsFromCarry(month));
-}
+function monthlyWealthSeries(year){return yearMonths(year).map(month=>assetTotalsFromCarry(month));}
 function assetTotalsFromCarry(month){
-  let cop=0,usd=0;state.assetItems.forEach(x=>{const v=assetValueForChart(x,month);if(x.currency==='USD')usd+=v;else cop+=v;});const rate=Number(state.settings.usdToCop||4000);return{cop,usd,totalCopEquivalent:cop+usd*rate};
+  let cop=0,usd=0;state.assetItems.forEach(x=>{const v=assetValueForChart(x,month);if(x.currency==='USD')usd+=v;else cop+=v;});
+  const rate=Number(state.settings.usdToCop||4000);return{cop,usd,totalCopEquivalent:cop+usd*rate};
 }
 function annualExpenseCategories(year){
   const cats=categories();
   const series=cats.map(category=>({category,values:yearMonths(year).map(m=>state.expenseItems.filter(x=>x.category===category).reduce((s,x)=>s+getMonthValue(x,m),0))}));
   const sorted=series.filter(s=>s.values.some(v=>v!==0)).sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0));
-  if(sorted.length<=7) return sorted;
-  const top=sorted.slice(0,6);
-  const rest=sorted.slice(6);
+  if(sorted.length<=7)return sorted;
+  const top=sorted.slice(0,6),rest=sorted.slice(6);
   const otherValues=yearMonths(year).map((_,i)=>rest.reduce((sum,s)=>sum+s.values[i],0));
-  top.push({category:'Otros',values:otherValues});
-  return top;
-}
-function renderAnalytics(){
-  if(!$('#analyticsYearLabel'))return;
-  $('#analyticsYearLabel').textContent=analyticsYear;
-  const wealth=monthlyWealthSeries(analyticsYear);const current=wealth[Math.max(0,Number(currentMonth.slice(5,7))-1)] || wealth[11];
-  $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);$('#chartExpensesYear').textContent=money(annualExpenseCategories(analyticsYear).reduce((s,ser)=>s+ser.values.reduce((a,b)=>a+b,0),0));
-  $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
-  renderWealthLegend(wealth);
-  renderAssetSelector();
-  const asset=state.assetItems.find(x=>x.id===selectedAssetChart);
-  $('#assetChart').innerHTML=asset?lineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`):'';
-  const expSeries=annualExpenseCategories(analyticsYear);
-  $('#expenseChart').innerHTML=multiLineChart(monthShort,expSeries.slice(0,7));
-  $('#expenseLegend').innerHTML=expSeries.slice(0,7).map((s,i)=>`<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)}</span>`).join('')||'<span>Sin gastos registrados en este año.</span>';
-}
-function renderWealthLegend(wealth){
-  const first=wealth.find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;const last=[...wealth].reverse().find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;const diff=last-first;const arrow=diff>0?'↗':diff<0?'↘':'→';
-  $('#wealthLegend').innerHTML=`<span><i class="legend-dot"></i>Patrimonio total</span><span class="trend ${diff<0?'down':''}">${arrow} ${money(Math.abs(diff))} ${diff>=0?'de crecimiento':'de disminución'} en el año</span>`;
-}
-function renderAssetSelector(){
-  const select=$('#assetChartSelect');const prev=selectedAssetChart;select.innerHTML=`<option value="total">Patrimonio total</option>${state.assetItems.map(x=>`<option value="${escAttr(x.id)}">${esc(x.name)} · ${esc(x.currency)}</option>`).join('')}`;
-  selectedAssetChart=state.assetItems.some(x=>x.id===prev)?prev:'total';select.value=selectedAssetChart;
+  top.push({category:'Otros',values:otherValues});return top;
 }
 function chartGeometry(values,width=760,height=300){
-  const pad={l:58,r:16,t:18,b:42};const w=width-pad.l-pad.r,h=height-pad.t-pad.b;const max=Math.max(...values,1);const min=Math.min(...values,0);const range=max-min||1;return{pad,w,h,max,min,range,x:i=>pad.l+(i/(values.length-1||1))*w,y:v=>pad.t+h-((v-min)/range)*h};
+  const pad={l:58,r:16,t:18,b:42};const w=width-pad.l-pad.r,h=height-pad.t-pad.b;
+  const max=Math.max(...values,0);const min=Math.min(...values,0);const range=max-min||1;
+  return{pad,w,h,max,min,range,x:i=>pad.l+(i/(values.length-1||1))*w,y:v=>pad.t+h-((v-min)/range)*h};
 }
 function fmtAxis(v){if(Math.abs(v)>=1000000)return `$${(v/1000000).toFixed(1)}M`;if(Math.abs(v)>=1000)return `$${Math.round(v/1000)}K`;return `$${Math.round(v)}`;}
 function lineChart(labels,values,title){
-  const W=760,H=300,g=chartGeometry(values,W,H);const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const W=760,H=300,g=chartGeometry(values,W,H);
+  const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');
+  const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
-  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="4" class="chart-dot"><title>${labels[i]}: ${money(v)}</title></circle>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg>`;
+  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
+  return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
 function multiLineChart(labels,series){
   if(!series.length)return '<div class="empty">Sin gastos registrados en este año.</div>';
-  const all=series.flatMap(s=>s.values);const W=760,H=330,g=chartGeometry(all,W,H);const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
-  const lines=series.map((s,si)=>{const pts=s.values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');const c=chartPalette[si%chartPalette.length];const dots=s.values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="2.8" fill="${c}"><title>${esc(s.category)} · ${labels[i]}: ${money(v)}</title></circle>`).join('');return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;}).join('');
+  const all=series.flatMap(s=>s.values);const W=760,H=330,g=chartGeometry(all,W,H);
+  const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const lines=series.map((s,si)=>{const pts=s.values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');const c=chartPalette[si%chartPalette.length];const dots=s.values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" fill="transparent" class="chart-hit chart-hit-area" data-label="${escAttr(s.category+' · '+labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(s.category)} · ${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="4" fill="${c}" pointer-events="none"/>`).join('');return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;}).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gastos por categoría"><g>${grid}</g>${lines}${xlabels}</svg>`;
+  return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gastos por categoría"><g>${grid}</g>${lines}${xlabels}</svg></div>`;
+}
+
+function handleChartPointer(e){
+  const dot=e.target.closest?.('.chart-hit');if(!dot)return;
+  const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(!tip)return;
+  tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');positionChartTooltip(e,tip,wrap);
+}
+function handleChartPointerMove(e){
+  const dot=e.target.closest?.('.chart-hit');if(!dot)return;
+  const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(tip?.classList.contains('show'))positionChartTooltip(e,tip,wrap);
+}
+function positionChartTooltip(e,tip,wrap){
+  const r=wrap.getBoundingClientRect();
+  let left=e.clientX-r.left+10,top=e.clientY-r.top-42;
+  left=Math.max(6,Math.min(left,r.width-tip.offsetWidth-6));top=Math.max(6,top);
+  tip.style.left=`${left}px`;tip.style.top=`${top}px`;
+}
+function handleChartPointerOut(e){
+  const from=e.target.closest?.('.chart-hit');if(!from)return;
+  const to=e.relatedTarget?.closest?.('.chart-hit');if(to===from)return;
+  const wrap=from.closest('.chart-svg-wrap');wrap?.querySelector('.chart-tooltip')?.classList.remove('show');
 }
 
 function openForm(title,fields,onSubmit){

@@ -1,18 +1,18 @@
-# Mi Presupuesto
+# Mi Presupuesto — Gaachinte Finanzas
 
-Aplicación web/PWA de presupuesto personal, pensada primero para celular.
+Aplicación web/PWA para presupuesto personal, pensada primero para iPhone y con almacenamiento local.
 
-## V4
-- Presupuesto mensual: ingresos, gastos y extra disponible.
-- Gastos por categoría y subcategoría.
-- El botón `+` de una categoría crea una subcategoría dentro de esa categoría.
-- El lápiz de una categoría permite renombrarla.
-- El lápiz de una subcategoría permite renombrarla claramente.
-- Copia de gastos del mes anterior.
-- Ahorros e inversiones por saldo mensual.
-- Datos locales mediante `localStorage`.
-- Exportar/importar JSON para mover los datos entre dispositivos.
-- PWA para instalar en iPhone desde Safari.
+## Menús
+- Inicio: ingresos, gastos y extra disponible.
+- Gastos: categorías, subcategorías y copia del mes anterior.
+- Ahorros: saldos de cuentas/inversiones y copia del mes anterior.
+- Ingresos: salario, arriendos y otros.
+- Análisis: patrimonio y gastos de enero a diciembre.
 
-## Importante al actualizar GitHub Pages
-Si el teléfono muestra una versión anterior, cierra la PWA y vuelve a abrir la página desde Safari. La V4 usa un nuevo caché y una estrategia de actualización para evitar quedarse con el JavaScript anterior.
+## Datos
+Los cambios se guardan en `localStorage` del dispositivo. Usa Configuración → Exportar JSON para llevar los datos a otro dispositivo y Configuración → Importar JSON para recuperarlos.
+
+Los saldos de ahorros/inversiones se pueden copiar del mes anterior. Al entrar en enero de un nuevo año, si enero todavía no tiene saldos y diciembre del año anterior sí los tiene, la app los pasa automáticamente a enero como saldo inicial del nuevo año.
+
+## GitHub Pages
+Sube todos los archivos a la raíz del repositorio y activa GitHub Pages desde `main` / root.

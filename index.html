@@ -47,6 +47,7 @@
     <section id="view-savings" class="view">
       <div class="page-title-row"><div><span class="eyebrow">TERCERA TABLA</span><h2>Ahorros e inversiones</h2><p>Solo actualiza el saldo de cada cuenta o inversión.</p></div><button id="addAssetBtn" class="primary-btn">＋ Cuenta</button></div>
       <div class="month-control compact card"><button id="prevMonthSavings" class="month-arrow">‹</button><strong id="savingsMonthLabel">Septiembre 2026</strong><button id="nextMonthSavings" class="month-arrow">›</button></div>
+      <div class="quick-actions"><button id="copyPreviousSavings" class="secondary-btn">↗ Copiar saldos del mes anterior</button></div>
       <div id="assetRows" class="rows-card"></div>
       <div class="wealth-summary"><div><span>Total COP</span><strong id="copTotal">$0</strong></div><div><span>Total USD</span><strong id="usdTotal">US$0</strong></div></div>
     </section>
@@ -58,9 +59,30 @@
       <div id="incomeRows" class="rows-card"></div>
       <div class="sticky-total"><span>Ingreso del mes</span><strong id="incomeViewTotal">$0</strong></div>
     </section>
+
+    <section id="view-analytics" class="view">
+      <div class="page-title-row"><div><span class="eyebrow">ÚLTIMO MENÚ</span><h2>Análisis</h2><p>Consulta la evolución de tu patrimonio y de tus gastos de enero a diciembre.</p></div></div>
+      <div class="year-control card"><button id="prevYear" class="month-arrow" aria-label="Año anterior">‹</button><div class="month-center"><span class="label">AÑO</span><strong id="analyticsYearLabel">2026</strong></div><button id="nextYear" class="month-arrow" aria-label="Año siguiente">›</button></div>
+
+      <section class="chart-card">
+        <div class="section-heading"><div><span class="eyebrow">PATRIMONIO</span><h3>Evolución de ahorros e inversiones</h3></div></div>
+        <div class="chart-highlight"><span>Patrimonio al cierre del mes</span><strong id="chartWealthCurrent">$0</strong></div>
+        <div id="wealthChart" class="chart-wrap" aria-label="Gráfico de patrimonio"></div>
+        <div class="chart-legend" id="wealthLegend"></div>
+        <div class="form-field chart-select-field"><label>Ver evolución de una cuenta</label><select id="assetChartSelect" class="select"></select></div>
+        <div id="assetChart" class="chart-wrap small-chart" aria-label="Gráfico de cuenta"></div>
+      </section>
+
+      <section class="chart-card">
+        <div class="section-heading"><div><span class="eyebrow">GASTOS</span><h3>Gastos por categoría</h3></div></div>
+        <div class="chart-highlight"><span>Total de gastos del año</span><strong id="chartExpensesYear">$0</strong></div>
+        <div id="expenseChart" class="chart-wrap" aria-label="Gráfico de gastos por categoría"></div>
+        <div class="chart-legend" id="expenseLegend"></div>
+      </section>
+    </section>
   </main>
 
-  <nav class="bottom-nav" aria-label="Navegación principal"><button class="nav-item active" data-view="home"><span>📊</span><small>Inicio</small></button><button class="nav-item" data-view="expenses"><span>💸</span><small>Gastos</small></button><button class="nav-item" data-view="savings"><span>🏦</span><small>Ahorros</small></button><button class="nav-item" data-view="income"><span>💰</span><small>Ingresos</small></button></nav>
+  <nav class="bottom-nav" aria-label="Navegación principal"><button class="nav-item active" data-view="home"><span>📊</span><small>Inicio</small></button><button class="nav-item" data-view="expenses"><span>💸</span><small>Gastos</small></button><button class="nav-item" data-view="savings"><span>🏦</span><small>Ahorros</small></button><button class="nav-item" data-view="income"><span>💰</span><small>Ingresos</small></button><button class="nav-item" data-view="analytics"><span>📈</span><small>Análisis</small></button></nav>
   <div id="modalBackdrop" class="modal-backdrop hidden"><div id="modal" class="modal" role="dialog" aria-modal="true"></div></div>
   <script src="app.js"></script>
 </body>

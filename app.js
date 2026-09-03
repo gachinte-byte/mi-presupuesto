@@ -2,21 +2,27 @@ const STORAGE_KEY = 'miPresupuesto.v2';
 const DATA_URL = 'data.json';
 
 const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const monthShort = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const chartPalette = ['#4f4a68','#123f50','#c99a3d','#2e8b65','#c85454','#6a6388','#7b8f9e','#9b6b52'];
 let state = null;
 let activeView = 'home';
 let currentMonth = '2026-09';
+let analyticsYear = 2026;
+let selectedAssetChart = 'total';
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 function id(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
 function monthLabel(key) { const [y,m] = key.split('-').map(Number); return `${monthNames[m-1]} ${y}`; }
 function shiftMonth(key, delta) { const [y,m] = key.split('-').map(Number); const d = new Date(y, m-1 + delta, 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function yearMonths(year) { return Array.from({length:12},(_,i)=>`${year}-${String(i+1).padStart(2,'0')}`); }
 function money(value, currency='COP') { const n = Number(value || 0); return new Intl.NumberFormat('es-CO',{style:'currency',currency,maximumFractionDigits:0}).format(n); }
 function numberValue(value) { return Number(String(value ?? '').replace(/[^0-9.-]/g,'')) || 0; }
 function ensureMonthly(item) { if (!item.monthly) item.monthly = {}; }
 function getMonthValue(item, month) { ensureMonthly(item); return Number(item.monthly[month] || 0); }
+function hasOwnMonthValue(item, month) { return Object.prototype.hasOwnProperty.call(item.monthly || {}, month); }
 function setMonthValue(item, month, value) { ensureMonthly(item); item.monthly[month] = Number(value) || 0; }
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save() { state.currentMonth = currentMonth; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 function normalize(data) {
@@ -42,8 +48,11 @@ function normalize(data) {
 
 async function boot() {
   const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('miPresupuesto.v1');
-  if (saved) { try { state=normalize(JSON.parse(saved)); currentMonth=state.currentMonth||currentMonth; save(); } catch { state=null; } }
-  if (!state) { const res=await fetch(DATA_URL); state=normalize(await res.json()); currentMonth=state.currentMonth||currentMonth; save(); }
+  if (saved) { try { state=normalize(JSON.parse(saved)); currentMonth=state.currentMonth||currentMonth; } catch { state=null; } }
+  if (!state) { const res=await fetch(DATA_URL); state=normalize(await res.json()); currentMonth=state.currentMonth||currentMonth; }
+  analyticsYear = Number(currentMonth.slice(0,4));
+  autoCarryJanuarySavings();
+  save();
   bindEvents(); render(); registerSW();
 }
 
@@ -68,11 +77,30 @@ function bindEvents() {
   $('#addAssetBtn').onclick=()=>openAddAsset();
   $('#copyPreviousMonth').onclick=copyPreviousMonth;
   $('#copyPreviousExpenses').onclick=copyPreviousExpenses;
+  $('#copyPreviousSavings').onclick=copyPreviousSavings;
+  $('#prevYear').onclick=()=>{analyticsYear--;renderAnalytics();};
+  $('#nextYear').onclick=()=>{analyticsYear++;renderAnalytics();};
+  $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
   $('#settingsBtn').onclick=openSettings;
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
-function changeMonth(delta){currentMonth=shiftMonth(currentMonth,delta);state.currentMonth=currentMonth;save();render();}
+function changeMonth(delta){
+  const next=shiftMonth(currentMonth,delta);
+  currentMonth=next;
+  analyticsYear=Number(currentMonth.slice(0,4));
+  autoCarryJanuarySavings();
+  save();render();
+}
+function autoCarryJanuarySavings(){
+  if(!state || !currentMonth.endsWith('-01')) return;
+  const prev=shiftMonth(currentMonth,-1);
+  const currentHas=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);
+  const previousHas=state.assetItems.some(x=>getMonthValue(x,prev)!==0);
+  if(currentHas || !previousHas) return;
+  state.assetItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));
+  toast(`Saldos de diciembre pasaron a ${monthLabel(currentMonth)}`);
+}
 function totals(month=currentMonth){const income=state.incomeItems.reduce((s,x)=>s+getMonthValue(x,month),0);const expenses=state.expenseItems.reduce((s,x)=>s+getMonthValue(x,month),0);return{income,expenses,extra:income-expenses};}
 function annualTotal(item){return Object.values(item.monthly||{}).reduce((s,v)=>s+Number(v||0),0);}
 function categoryTotals(month=currentMonth){const map={};state.expenseItems.forEach(x=>{const v=getMonthValue(x,month);if(v)map[x.category]=(map[x.category]||0)+v;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);}
@@ -80,7 +108,7 @@ function assetTotals(month=currentMonth){let cop=0,usd=0;state.assetItems.forEac
 function categories(){return [...new Set(state.expenseItems.map(x=>x.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));}
 function subcategories(category){return state.expenseItems.filter(x=>x.category===category).map(x=>x.subcategory).filter(Boolean).sort((a,b)=>a.localeCompare(b,'es'));}
 
-function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();}
+function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
 function renderMonthLabels(){$('#currentMonthLabel').textContent=monthLabel(currentMonth);$('#expenseMonthLabel').textContent=monthLabel(currentMonth);$('#savingsMonthLabel').textContent=monthLabel(currentMonth);$('#incomeMonthLabel').textContent=monthLabel(currentMonth);}
 function renderHome(){
   const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
@@ -112,22 +140,17 @@ function expenseItemHTML(x){const val=getMonthValue(x,currentMonth);return `<div
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
 function editCategory(category){
   openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{
-    const newName=val.name.trim();
-    if(!newName){alert('Escribe un nombre para la categoría.');return;}
-    if(newName===category){closeModal();return;}
-    const exists=categories().some(c=>c.toLowerCase()===newName.toLowerCase() && c!==category);
-    if(exists){alert('Ya existe una categoría con ese nombre.');return;}
-    state.expenseItems.forEach(x=>{if(x.category===category)x.category=newName;});
-    save();render();toast('Categoría renombrada');
+    const newName=val.name.trim(); if(!newName){alert('Escribe un nombre para la categoría.');return;}
+    if(newName===category)return;
+    if(categories().some(c=>c.toLowerCase()===newName.toLowerCase() && c!==category)){alert('Ya existe una categoría con ese nombre.');return;}
+    state.expenseItems.forEach(x=>{if(x.category===category)x.category=newName;});save();render();toast('Categoría renombrada');
   });
 }
 function editExpense(id_){
   const x=state.expenseItems.find(i=>i.id===id_);if(!x)return;
   openSubcategoryForm('Editar subcategoría',x.category,x.subcategory,(subcategory)=>{
-    const newName=subcategory.trim();
-    if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
-    const duplicate=state.expenseItems.some(i=>i.id!==x.id && i.category===x.category && i.subcategory.toLowerCase()===newName.toLowerCase());
-    if(duplicate){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
+    const newName=subcategory.trim();if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
+    const duplicate=state.expenseItems.some(i=>i.id!==x.id&&i.category===x.category&&i.subcategory.toLowerCase()===newName.toLowerCase());if(duplicate){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
     x.subcategory=newName;save();render();toast('Subcategoría renombrada');return true;
   });
 }
@@ -135,10 +158,8 @@ function deleteExpense(id_){if(!confirm('¿Eliminar este gasto y sus valores?'))
 function openAddExpense(category=''){
   if(category){
     openSubcategoryForm('Nueva subcategoría',category,'',(subcategory)=>{
-      const newName=subcategory.trim();
-      if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
-      const duplicate=state.expenseItems.some(i=>i.category===category && i.subcategory.toLowerCase()===newName.toLowerCase());
-      if(duplicate){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
+      const newName=subcategory.trim();if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
+      if(state.expenseItems.some(x=>x.category===category&&x.subcategory.toLowerCase()===newName.toLowerCase())){alert('Ya existe esa subcategoría dentro de la categoría.');return false;}
       state.expenseItems.push({id:id('exp'),category,subcategory:newName,monthly:{}});save();render();toast('Subcategoría creada');return true;
     });
     return;
@@ -146,70 +167,41 @@ function openAddExpense(category=''){
   openExpenseForm('Nuevo gasto','','',(cat,sub)=>{state.expenseItems.push({id:id('exp'),category:cat,subcategory:sub,monthly:{}});save();render();toast('Gasto creado');});
 }
 function openSubcategoryForm(title,category,initialSubcategory,onSubmit){
-  $('#modal').innerHTML=`<h3>${esc(title)}</h3>
-    <form id="subcategoryForm">
-      <div class="form-field"><label>Categoría</label><div class="category-form-display">${esc(category)}</div></div>
-      <div class="form-field"><label>${title==='Nueva subcategoría'?'Nombre de la subcategoría':'Nombre de la subcategoría'}</label><input class="input" id="subcategoryNameInput" name="subcategory" value="${escAttr(initialSubcategory)}" placeholder="Ej. Restaurantes" autocomplete="off"></div>
-      <p class="helper">${title==='Nueva subcategoría'?'Esta subcategoría quedará dentro de la categoría seleccionada.':'Aquí solo cambias el nombre de la subcategoría. La categoría no se modifica.'}</p>
-      <div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">${title==='Nueva subcategoría'?'Crear subcategoría':'Guardar cambios'}</button></div>
-    </form>`;
+  const isNew=title==='Nueva subcategoría';
+  $('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="subcategoryForm"><div class="form-field"><label>Categoría</label><div class="category-form-display">${esc(category)}</div></div><div class="form-field"><label>Nombre de la subcategoría</label><input class="input" id="subcategoryNameInput" name="subcategory" value="${escAttr(initialSubcategory)}" placeholder="Ej. Restaurantes" autocomplete="off" required></div><p class="helper">${isNew?'Esta subcategoría quedará dentro de la categoría seleccionada.':'Aquí solo cambias el nombre de la subcategoría. La categoría no se modifica.'}</p><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">${isNew?'Crear subcategoría':'Guardar cambios'}</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');
-  $('#subcategoryForm').onsubmit=e=>{
-    e.preventDefault();
-    const ok=onSubmit($('#subcategoryNameInput').value);
-    if(ok!==false)closeModal();
-  };
+  $('#subcategoryForm').onsubmit=e=>{e.preventDefault();const ok=onSubmit($('#subcategoryNameInput').value);if(ok!==false)closeModal();};
   setTimeout(()=>$('#subcategoryNameInput').focus(),50);
 }
-
 function openExpenseForm(title, initialCategory='', initialSubcategory='', onSubmit){
-  const cats=categories();
-  const safeInitialCat=cats.includes(initialCategory)?initialCategory:(initialCategory||'');
-  const subOpts=safeInitialCat?subcategories(safeInitialCat):[];
-  $('#modal').innerHTML=`<h3>${esc(title)}</h3>
-    <form id="expenseForm">
-      <div class="form-field"><label>Categoría</label><select class="select" id="expenseCategorySelect" name="category"><option value="">Selecciona una categoría...</option>${cats.map(c=>`<option value="${escAttr(c)}" ${c===safeInitialCat?'selected':''}>${esc(c)}</option>`).join('')}<option value="__new__">＋ Crear nueva categoría</option></select></div>
-      <div class="form-field hidden" id="newCategoryField"><label>Nueva categoría</label><input class="input" id="newCategoryInput" placeholder="Ej. Ocio"></div>
-      <div class="form-field"><label>Subcategoría</label><select class="select" id="expenseSubcategorySelect" name="subcategory"><option value="">${safeInitialCat?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${subOpts.map(s=>`<option value="${escAttr(s)}" ${s===initialSubcategory?'selected':''}>${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option></select></div>
-      <div class="form-field hidden" id="newSubcategoryField"><label>Nueva subcategoría</label><input class="input" id="newSubcategoryInput" placeholder="Ej. Restaurantes"></div>
-      <div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div>
-    </form>`;
+  const cats=categories();const safeInitialCat=cats.includes(initialCategory)?initialCategory:(initialCategory||'');const subOpts=safeInitialCat?subcategories(safeInitialCat):[];
+  $('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="expenseForm"><div class="form-field"><label>Categoría</label><select class="select" id="expenseCategorySelect" name="category"><option value="">Selecciona una categoría...</option>${cats.map(c=>`<option value="${escAttr(c)}" ${c===safeInitialCat?'selected':''}>${esc(c)}</option>`).join('')}<option value="__new__">＋ Crear nueva categoría</option></select></div><div class="form-field hidden" id="newCategoryField"><label>Nueva categoría</label><input class="input" id="newCategoryInput" placeholder="Ej. Ocio"></div><div class="form-field"><label>Subcategoría</label><select class="select" id="expenseSubcategorySelect" name="subcategory"><option value="">${safeInitialCat?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${subOpts.map(s=>`<option value="${escAttr(s)}" ${s===initialSubcategory?'selected':''}>${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option></select></div><div class="form-field hidden" id="newSubcategoryField"><label>Nueva subcategoría</label><input class="input" id="newSubcategoryInput" placeholder="Ej. Restaurantes"></div><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');
   const catSel=$('#expenseCategorySelect'),subSel=$('#expenseSubcategorySelect');
-  catSel.onchange=()=>{
-    const val=catSel.value;$('#newCategoryField').classList.toggle('hidden',val!=='__new__');
-    const actual=val==='__new__'?'':val;const opts=actual?subcategories(actual):[];
-    subSel.innerHTML=`<option value="">${actual?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${opts.map(s=>`<option value="${escAttr(s)}">${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option>`;
-    $('#newSubcategoryField').classList.add('hidden');
-    if(val==='__new__')setTimeout(()=>$('#newCategoryInput').focus(),30);
-  };
+  catSel.onchange=()=>{const val=catSel.value;$('#newCategoryField').classList.toggle('hidden',val!=='__new__');const actual=val==='__new__'?'':val;const opts=actual?subcategories(actual):[];subSel.innerHTML=`<option value="">${actual?'Selecciona una subcategoría...':'Primero selecciona una categoría...'}</option>${opts.map(s=>`<option value="${escAttr(s)}">${esc(s)}</option>`).join('')}<option value="__new__">＋ Crear nueva subcategoría</option>`;$('#newSubcategoryField').classList.add('hidden');if(val==='__new__')setTimeout(()=>$('#newCategoryInput').focus(),30);};
   subSel.onchange=()=>{$('#newSubcategoryField').classList.toggle('hidden',subSel.value!=='__new__');if(subSel.value==='__new__')setTimeout(()=>$('#newSubcategoryInput').focus(),30);};
-  $('#expenseForm').onsubmit=e=>{e.preventDefault();let category=catSel.value;let sub=subSel.value;if(category==='__new__')category=$('#newCategoryInput').value.trim();if(sub==='__new__')sub=$('#newSubcategoryInput').value.trim();if(!category){alert('Selecciona o crea una categoría.');return;}if(!sub){alert('Selecciona o crea una subcategoría.');return;}onSubmit(category,sub);closeModal();};
+  $('#expenseForm').onsubmit=e=>{e.preventDefault();let category=catSel.value,sub=subSel.value;if(category==='__new__')category=$('#newCategoryInput').value.trim();if(sub==='__new__')sub=$('#newSubcategoryInput').value.trim();if(!category){alert('Selecciona o crea una categoría.');return;}if(!sub){alert('Selecciona o crea una subcategoría.');return;}if(state.expenseItems.some(x=>x.category.toLowerCase()===category.toLowerCase()&&x.subcategory.toLowerCase()===sub.toLowerCase())){alert('Esa subcategoría ya existe dentro de la categoría.');return;}onSubmit(category,sub);closeModal();};
   setTimeout(()=>catSel.focus(),50);
 }
 
 function copyPreviousExpenses(){
-  const prev=shiftMonth(currentMonth,-1);
-  const previousHasValues=state.expenseItems.some(x=>getMonthValue(x,prev)!==0);
-  if(!previousHasValues){toast(`No hay gastos registrados en ${monthLabel(prev)}`);return;}
-  const overwrite=currentMonthHasExpenses();
-  const message=overwrite?`Ya hay gastos en ${monthLabel(currentMonth)}. ¿Quieres reemplazar sus valores con los de ${monthLabel(prev)}?`:`¿Copiar los gastos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
-  if(!confirm(message))return;
-  state.expenseItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));
-  save();render();toast(`Gastos copiados de ${monthLabel(prev)}`);
+  const prev=shiftMonth(currentMonth,-1);if(!state.expenseItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay gastos registrados en ${monthLabel(prev)}`);return;}
+  const overwrite=currentMonthHasExpenses();const message=overwrite?`Ya hay gastos en ${monthLabel(currentMonth)}. ¿Quieres reemplazar sus valores con los de ${monthLabel(prev)}?`:`¿Copiar los gastos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
+  if(!confirm(message))return;state.expenseItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Gastos copiados de ${monthLabel(prev)}`);
 }
 function currentMonthHasExpenses(){return state.expenseItems.some(x=>getMonthValue(x,currentMonth)!==0);}
 function copyPreviousMonth(){
-  const prev=shiftMonth(currentMonth,-1);
-  const has=state.incomeItems.some(x=>getMonthValue(x,prev)!==0);
-  if(!has){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
-  if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;
-  state.incomeItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));
-  save();render();toast(`Ingresos copiados de ${monthLabel(prev)}`);
+  const prev=shiftMonth(currentMonth,-1);if(!state.incomeItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
+  if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;state.incomeItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Ingresos copiados de ${monthLabel(prev)}`);
+}
+function copyPreviousSavings(){
+  const prev=shiftMonth(currentMonth,-1);if(!state.assetItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
+  const overwrite=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
+  if(!confirm(message))return;state.assetItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Saldos copiados de ${monthLabel(prev)}`);
 }
 
 function renderAssets(){
-  const wrap=$('#assetRows'),cats=[...new Set(state.assetItems.map(x=>x.category))];
+  const wrap=$('#assetRows'),cats=[...new Set(state.assetItems.map(x=>x.category).filter(Boolean))];
   wrap.innerHTML=cats.map(cat=>{const items=state.assetItems.filter(x=>x.category===cat);return `<section class="asset-category-card"><div class="category-header"><div class="category-title">${esc(cat)}</div></div><div class="category-items">${items.map(assetItemHTML).join('')}</div></section>`;}).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
   const a=assetTotals();$('#copTotal').textContent=money(a.cop);$('#usdTotal').textContent=money(a.usd,'USD');
 }
@@ -219,9 +211,78 @@ function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)retur
 function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus saldos?'))return;state.assetItems=state.assetItems.filter(x=>x.id!==id_);save();render();}
 function openAddAsset(){openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'text',placeholder:'Ej. FIDUCUENTA'},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],val=>{state.assetItems.push({id:id('ast'),category:val.category.trim()||'OTROS',name:val.name.trim()||'Nueva cuenta',currency:val.currency,monthly:{}});save();render();toast('Cuenta creada');});}
 
+/* ---------- ANALÍTICA ANUAL ---------- */
+function previousKnownAssetValue(asset, month){
+  let m=month;
+  for(let i=0;i<120;i++){
+    if(hasOwnMonthValue(asset,m) && getMonthValue(asset,m)!==0) return getMonthValue(asset,m);
+    m=shiftMonth(m,-1);
+  }
+  return 0;
+}
+function assetValueForChart(asset, month){
+  if(hasOwnMonthValue(asset,month) && getMonthValue(asset,month)!==0) return getMonthValue(asset,month);
+  return previousKnownAssetValue(asset,shiftMonth(month,-1));
+}
+function monthlyWealthSeries(year){
+  return yearMonths(year).map(month=>assetTotalsFromCarry(month));
+}
+function assetTotalsFromCarry(month){
+  let cop=0,usd=0;state.assetItems.forEach(x=>{const v=assetValueForChart(x,month);if(x.currency==='USD')usd+=v;else cop+=v;});const rate=Number(state.settings.usdToCop||4000);return{cop,usd,totalCopEquivalent:cop+usd*rate};
+}
+function annualExpenseCategories(year){
+  const cats=categories();
+  const series=cats.map(category=>({category,values:yearMonths(year).map(m=>state.expenseItems.filter(x=>x.category===category).reduce((s,x)=>s+getMonthValue(x,m),0))}));
+  const sorted=series.filter(s=>s.values.some(v=>v!==0)).sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0));
+  if(sorted.length<=7) return sorted;
+  const top=sorted.slice(0,6);
+  const rest=sorted.slice(6);
+  const otherValues=yearMonths(year).map((_,i)=>rest.reduce((sum,s)=>sum+s.values[i],0));
+  top.push({category:'Otros',values:otherValues});
+  return top;
+}
+function renderAnalytics(){
+  if(!$('#analyticsYearLabel'))return;
+  $('#analyticsYearLabel').textContent=analyticsYear;
+  const wealth=monthlyWealthSeries(analyticsYear);const current=wealth[Math.max(0,Number(currentMonth.slice(5,7))-1)] || wealth[11];
+  $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);$('#chartExpensesYear').textContent=money(annualExpenseCategories(analyticsYear).reduce((s,ser)=>s+ser.values.reduce((a,b)=>a+b,0),0));
+  $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
+  renderWealthLegend(wealth);
+  renderAssetSelector();
+  const asset=state.assetItems.find(x=>x.id===selectedAssetChart);
+  $('#assetChart').innerHTML=asset?lineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`):'';
+  const expSeries=annualExpenseCategories(analyticsYear);
+  $('#expenseChart').innerHTML=multiLineChart(monthShort,expSeries.slice(0,7));
+  $('#expenseLegend').innerHTML=expSeries.slice(0,7).map((s,i)=>`<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)}</span>`).join('')||'<span>Sin gastos registrados en este año.</span>';
+}
+function renderWealthLegend(wealth){
+  const first=wealth.find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;const last=[...wealth].reverse().find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;const diff=last-first;const arrow=diff>0?'↗':diff<0?'↘':'→';
+  $('#wealthLegend').innerHTML=`<span><i class="legend-dot"></i>Patrimonio total</span><span class="trend ${diff<0?'down':''}">${arrow} ${money(Math.abs(diff))} ${diff>=0?'de crecimiento':'de disminución'} en el año</span>`;
+}
+function renderAssetSelector(){
+  const select=$('#assetChartSelect');const prev=selectedAssetChart;select.innerHTML=`<option value="total">Patrimonio total</option>${state.assetItems.map(x=>`<option value="${escAttr(x.id)}">${esc(x.name)} · ${esc(x.currency)}</option>`).join('')}`;
+  selectedAssetChart=state.assetItems.some(x=>x.id===prev)?prev:'total';select.value=selectedAssetChart;
+}
+function chartGeometry(values,width=760,height=300){
+  const pad={l:58,r:16,t:18,b:42};const w=width-pad.l-pad.r,h=height-pad.t-pad.b;const max=Math.max(...values,1);const min=Math.min(...values,0);const range=max-min||1;return{pad,w,h,max,min,range,x:i=>pad.l+(i/(values.length-1||1))*w,y:v=>pad.t+h-((v-min)/range)*h};
+}
+function fmtAxis(v){if(Math.abs(v)>=1000000)return `$${(v/1000000).toFixed(1)}M`;if(Math.abs(v)>=1000)return `$${Math.round(v/1000)}K`;return `$${Math.round(v)}`;}
+function lineChart(labels,values,title){
+  const W=760,H=300,g=chartGeometry(values,W,H);const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
+  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="4" class="chart-dot"><title>${labels[i]}: ${money(v)}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg>`;
+}
+function multiLineChart(labels,series){
+  if(!series.length)return '<div class="empty">Sin gastos registrados en este año.</div>';
+  const all=series.flatMap(s=>s.values);const W=760,H=330,g=chartGeometry(all,W,H);const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const lines=series.map((s,si)=>{const pts=s.values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');const c=chartPalette[si%chartPalette.length];const dots=s.values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="2.8" fill="${c}"><title>${esc(s.category)} · ${labels[i]}: ${money(v)}</title></circle>`).join('');return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;}).join('');
+  const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gastos por categoría"><g>${grid}</g>${lines}${xlabels}</svg>`;
+}
+
 function openForm(title,fields,onSubmit){
-  const formId='dynamicForm';
-  $('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="${formId}">${fields.map(f=>`<div class="form-field"><label>${esc(f.name)}</label>${f.type==='select'?`<select class="select" name="${f.key}">${f.options.map(o=>`<option ${o===f.value?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input class="input" name="${f.key}" type="${f.type||'text'}" value="${escAttr(f.value||'')}" placeholder="${escAttr(f.placeholder||'')}" required>`}</div>`).join('')}<div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
+  const formId='dynamicForm';$('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="${formId}">${fields.map(f=>`<div class="form-field"><label>${esc(f.name)}</label>${f.type==='select'?`<select class="select" name="${f.key}">${f.options.map(o=>`<option ${o===f.value?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input class="input" name="${f.key}" type="${f.type||'text'}" value="${escAttr(f.value||'')}" placeholder="${escAttr(f.placeholder||'')}" required>`}</div>`).join('')}<div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');$('#'+formId).onsubmit=e=>{e.preventDefault();const val=Object.fromEntries(new FormData(e.target).entries());onSubmit(val);closeModal();};setTimeout(()=>$('#'+formId)?.querySelector('input,select')?.focus(),50);
 }
 function openSettings(){
@@ -230,10 +291,10 @@ function openSettings(){
 }
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
-function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}
-async function resetLocal(){if(!confirm('Esto borrará los datos guardados en este dispositivo y volverá a los datos iniciales. ¿Continuar?'))return;localStorage.removeItem(STORAGE_KEY);const res=await fetch(`${DATA_URL}?reset=${Date.now()}`);state=normalize(await res.json());currentMonth=state.currentMonth;save();closeModal();render();toast('Datos restaurados');}
+function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}
+async function resetLocal(){if(!confirm('Esto borrará los datos guardados en este dispositivo y volverá a los datos iniciales. ¿Continuar?'))return;localStorage.removeItem(STORAGE_KEY);const res=await fetch(`${DATA_URL}?reset=${Date.now()}`);state=normalize(await res.json());currentMonth=state.currentMonth;analyticsYear=Number(currentMonth.slice(0,4));save();closeModal();render();toast('Datos restaurados');}
 function closeModal(){$('#modalBackdrop').classList.add('hidden');}
-function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=text;document.body.appendChild(t);setTimeout(()=>t.remove(),1800);}
+function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=text;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function escAttr(s){return esc(s).replace(/`/g,'&#96;');}
 function registerSW(){if('serviceWorker' in navigator && location.protocol!=='file:')navigator.serviceWorker.register('sw.js').catch(()=>{});}
@@ -242,5 +303,6 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.copyPreviousSavings=copyPreviousSavings;
 
 boot();

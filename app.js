@@ -11,6 +11,7 @@ let analyticsYear = 2026;
 let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
 let expenseOrganizeMode = false;
+let savingsOrganizeMode = false;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -20,6 +21,9 @@ function shiftMonth(key, delta) { const [y,m] = key.split('-').map(Number); cons
 function yearMonths(year) { return Array.from({length:12},(_,i)=>`${year}-${String(i+1).padStart(2,'0')}`); }
 function money(value, currency='COP') { const n = Number(value || 0); return new Intl.NumberFormat('es-CO',{style:'currency',currency,maximumFractionDigits:0}).format(n); }
 function numberValue(value) { return Number(String(value ?? '').replace(/[^0-9.-]/g,'')) || 0; }
+function formatNumber(value) { const n=numberValue(value); return n===0 ? '0' : new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n); }
+function focusNumberInput(el){ if(!el)return; const raw=numberValue(el.value); el.value=raw===0?'':String(raw); }
+function blurNumberInput(el){ if(!el)return; el.value=formatNumber(el.value); }
 function ensureMonthly(item) { if (!item.monthly) item.monthly = {}; }
 function getMonthValue(item, month) { ensureMonthly(item); return Number(item.monthly[month] || 0); }
 function hasOwnMonthValue(item, month) { return Object.prototype.hasOwnProperty.call(item.monthly || {}, month); }
@@ -38,6 +42,8 @@ function normalize(data) {
   // se añaden al final las categorías/subcategorías nuevas.
   data.expenseCategoryOrder ||= [];
   data.expenseSubcategoryOrder ||= {};
+  data.assetCategoryOrder ||= [];
+  data.assetSubcategoryOrder ||= {};
   const existingCategories = [...new Set(data.expenseItems.map(x => x.category).filter(Boolean))];
   const validCategoryOrder = data.expenseCategoryOrder.filter(c => existingCategories.includes(c));
   existingCategories.forEach(c => { if (!validCategoryOrder.includes(c)) validCategoryOrder.push(c); });
@@ -53,6 +59,18 @@ function normalize(data) {
     ensureMonthly(x);
     if (x.category === '[object PointerEvent]' || x.category === '[object Event]') x.category = 'Otros';
     if (x.subcategory === '[object PointerEvent]' || x.subcategory === '[object Event]') x.subcategory = 'Nuevo gasto';
+    if (x.name === '[object PointerEvent]' || x.name === '[object Event]') x.name = 'Nueva cuenta';
+  }
+  const existingAssetCategories = [...new Set(data.assetItems.map(x => x.category).filter(Boolean))];
+  const validAssetCategoryOrder = data.assetCategoryOrder.filter(c => existingAssetCategories.includes(c));
+  existingAssetCategories.forEach(c => { if (!validAssetCategoryOrder.includes(c)) validAssetCategoryOrder.push(c); });
+  data.assetCategoryOrder = validAssetCategoryOrder;
+  for (const cat of existingAssetCategories) {
+    const existingSubs = data.assetItems.filter(x => x.category === cat).map(x => x.name).filter(Boolean);
+    const savedSubs = Array.isArray(data.assetSubcategoryOrder[cat]) ? data.assetSubcategoryOrder[cat] : [];
+    const validSubs = savedSubs.filter(sub => existingSubs.includes(sub));
+    existingSubs.forEach(sub => { if (!validSubs.includes(sub)) validSubs.push(sub); });
+    data.assetSubcategoryOrder[cat] = validSubs;
   }
   if (data.legacy2025) {
     for (const [month, vals] of Object.entries(data.legacy2025)) {
@@ -86,6 +104,12 @@ function bindEvents() {
     if (action === 'move-category-down') moveExpenseCategory(btn.dataset.category,1);
     if (action === 'move-subcategory-up') moveExpenseSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
     if (action === 'move-subcategory-down') moveExpenseSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
+    if (action === 'move-asset-category-up') moveAssetCategory(btn.dataset.category,-1);
+    if (action === 'move-asset-category-down') moveAssetCategory(btn.dataset.category,1);
+    if (action === 'move-asset-subcategory-up') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
+    if (action === 'move-asset-subcategory-down') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
+    if (action === 'edit-asset-category') editAssetCategory(btn.dataset.category);
+    if (action === 'add-asset-to-category') openAddAsset(btn.dataset.category);
     if (action === 'edit-expense') editExpense(btn.dataset.id);
     if (action === 'delete-expense') deleteExpense(btn.dataset.id);
   });
@@ -110,6 +134,9 @@ function bindEvents() {
   document.addEventListener('pointermove',handleChartPointerMove);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
+  $('#toggleSavingsOrganize').onclick=toggleSavingsOrganize;
+  document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
+  document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
@@ -160,6 +187,12 @@ function moveExpenseSubcategory(category,subcategory,direction){
 }
 
 function toggleExpenseOrganize(){expenseOrganizeMode=!expenseOrganizeMode;renderExpenses();toast(expenseOrganizeMode?'Modo organización activado':'Orden guardado');}
+function orderedAssetCategories(){const existing=[...new Set(state.assetItems.map(x=>x.category).filter(Boolean))];const order=(state.assetCategoryOrder||[]).filter(c=>existing.includes(c));existing.forEach(c=>{if(!order.includes(c))order.push(c);});return order;}
+function orderedAssetSubcategories(category){const existing=state.assetItems.filter(x=>x.category===category).map(x=>x.name).filter(Boolean);const saved=(state.assetSubcategoryOrder&&state.assetSubcategoryOrder[category])||[];const order=saved.filter(s=>existing.includes(s));existing.forEach(s=>{if(!order.includes(s))order.push(s);});return order;}
+function moveAssetCategory(category,direction){const order=orderedAssetCategories(),i=order.indexOf(category),j=i+direction;if(i<0||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];state.assetCategoryOrder=order;save();renderAssets();}
+function moveAssetSubcategory(category,name,direction){const order=orderedAssetSubcategories(category),i=order.indexOf(name),j=i+direction;if(i<0||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];state.assetSubcategoryOrder[category]=order;save();renderAssets();}
+function toggleSavingsOrganize(){savingsOrganizeMode=!savingsOrganizeMode;renderAssets();toast(savingsOrganizeMode?'Modo organización activado':'Orden guardado');}
+
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
 function renderMonthLabels(){$('#currentMonthLabel').textContent=monthLabel(currentMonth);$('#expenseMonthLabel').textContent=monthLabel(currentMonth);$('#savingsMonthLabel').textContent=monthLabel(currentMonth);$('#incomeMonthLabel').textContent=monthLabel(currentMonth);}
 function renderHome(){
@@ -172,7 +205,7 @@ function renderHome(){
 function miniRow(a,b){return `<div class="mini-row"><span>${esc(a)}</span><strong>${b}</strong></div>`;}
 
 function renderIncome(){
-  const wrap=$('#incomeRows');wrap.innerHTML=state.incomeItems.map(x=>{const val=getMonthValue(x,currentMonth);return `<div class="data-row"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editIncome('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteIncome('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.name)}" value="${val||''}" placeholder="$ 0" onchange="updateIncome('${x.id}', this.value)"></div>`;}).join('')||'<div class="empty">Agrega tu primer ingreso.</div>';
+  const wrap=$('#incomeRows');wrap.innerHTML=state.incomeItems.map(x=>{const val=getMonthValue(x,currentMonth);return `<div class="data-row"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editIncome('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteIncome('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateIncome('${x.id}', this.value)"></div>`;}).join('')||'<div class="empty">Agrega tu primer ingreso.</div>';
   $('#incomeViewTotal').textContent=money(totals().income);
 }
 function updateIncome(id_,raw){const x=state.incomeItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Ingreso actualizado');}}
@@ -217,7 +250,7 @@ function expenseItemHTML(x,index,total,category){
         <button class="small-icon" title="Eliminar" aria-label="Eliminar gasto" data-action="delete-expense" data-id="${escAttr(x.id)}">🗑️</button>
       </div>
     </div>
-    <input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val||''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)">
+    <input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)">
   </div>`;
 }
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
@@ -311,15 +344,22 @@ function copyPreviousSavings(){
 }
 
 function renderAssets(){
-  const wrap=$('#assetRows'),cats=[...new Set(state.assetItems.map(x=>x.category).filter(Boolean))];
-  wrap.innerHTML=cats.map(cat=>{const items=state.assetItems.filter(x=>x.category===cat);return `<section class="asset-category-card"><div class="category-header"><div class="category-title">${esc(cat)}</div></div><div class="category-items">${items.map(assetItemHTML).join('')}</div></section>`;}).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
+  document.body.classList.toggle('savings-organizing', savingsOrganizeMode);
+  const organizeBtn=$('#toggleSavingsOrganize'); if(organizeBtn){organizeBtn.textContent=savingsOrganizeMode?'✓ Terminar organización':'↕ Organizar'; organizeBtn.classList.toggle('organize-active',savingsOrganizeMode);}
+  const wrap=$('#assetRows'),cats=orderedAssetCategories();
+  wrap.innerHTML=cats.map((cat,catIndex)=>{
+    const items=orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean);
+    const canUp=catIndex>0,canDown=catIndex<cats.length-1;
+    return `<section class="asset-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div></div><div class="category-header-actions"><button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-asset-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-asset-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon category-edit-btn" title="Editar categoría" aria-label="Editar categoría" data-action="edit-asset-category" data-category="${escAttr(cat)}">✏️</button><button class="small-icon add-sub-btn" title="Agregar cuenta a ${escAttr(cat)}" aria-label="Agregar cuenta" data-action="add-asset-to-category" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map((x,index)=>assetItemHTML(x,index,items.length,cat)).join('')}</div></section>`;
+  }).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
   const a=assetTotals();$('#copTotal').textContent=money(a.cop);$('#usdTotal').textContent=money(a.usd,'USD');
 }
-function assetItemHTML(x){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val||''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
+function assetItemHTML(x,index,total,category){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);const canUp=index>0,canDown=index<total-1;return `<div class="expense-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="order-text-btn organize-only" title="Mover cuenta arriba" aria-label="Mover cuenta arriba" data-action="move-asset-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover cuenta abajo" aria-label="Mover cuenta abajo" data-action="move-asset-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
 function updateAsset(id_,raw){const x=state.assetItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Saldo actualizado');}}
-function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:x.category},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],val=>{x.category=val.category.trim()||x.category;x.name=val.name.trim()||x.name;x.currency=val.currency;save();render();toast('Cuenta actualizada');});}
-function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus saldos?'))return;state.assetItems=state.assetItems.filter(x=>x.id!==id_);save();render();}
-function openAddAsset(){openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'text',placeholder:'Ej. FIDUCUENTA'},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],val=>{state.assetItems.push({id:id('ast'),category:val.category.trim()||'OTROS',name:val.name.trim()||'Nueva cuenta',currency:val.currency,monthly:{}});save();render();toast('Cuenta creada');});}
+function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:x.category},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],val=>{const oldCategory=x.category,oldName=x.name;x.category=val.category.trim()||x.category;x.name=val.name.trim()||x.name;x.currency=val.currency;state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(x.category))state.assetCategoryOrder.push(x.category);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[oldCategory] ||= [];state.assetSubcategoryOrder[oldCategory]=state.assetSubcategoryOrder[oldCategory].filter(n=>n!==oldName);state.assetSubcategoryOrder[x.category] ||= [];if(!state.assetSubcategoryOrder[x.category].includes(x.name))state.assetSubcategoryOrder[x.category].push(x.name);save();render();toast('Cuenta actualizada');});}
+function editAssetCategory(category){openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{const newName=val.name.trim();if(!newName||newName===category)return;if(orderedAssetCategories().some(c=>c.toLowerCase()===newName.toLowerCase()&&c!==category)){alert('Ya existe una categoría con ese nombre.');return;}state.assetItems.forEach(x=>{if(x.category===category)x.category=newName;});state.assetCategoryOrder=(state.assetCategoryOrder||[]).map(c=>c===category?newName:c);state.assetSubcategoryOrder ||= {};if(state.assetSubcategoryOrder[category]){state.assetSubcategoryOrder[newName]=state.assetSubcategoryOrder[category];delete state.assetSubcategoryOrder[category];}save();render();toast('Categoría renombrada');});}
+function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus saldos?'))return;const x=state.assetItems.find(i=>i.id===id_);state.assetItems=state.assetItems.filter(i=>i.id!==id_);if(x){state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[x.category]=(state.assetSubcategoryOrder[x.category]||[]).filter(n=>n!==x.name);}save();render();}
+function openAddAsset(category=''){openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:category,placeholder:'Ej. FIDUCUENTA'},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],val=>{const cat=val.category.trim()||'OTROS',name=val.name.trim()||'Nueva cuenta';state.assetItems.push({id:id('ast'),category:cat,name,currency:val.currency,monthly:{}});state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(cat))state.assetCategoryOrder.push(cat);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[cat] ||= [];if(!state.assetSubcategoryOrder[cat].includes(name))state.assetSubcategoryOrder[cat].push(name);save();render();toast('Cuenta creada');});}
 
 /* ---------- ANALÍTICA ANUAL ---------- */
 function renderAnalytics(){
@@ -456,11 +496,11 @@ function handleChartPointerOut(e){
 }
 
 function openForm(title,fields,onSubmit){
-  const formId='dynamicForm';$('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="${formId}">${fields.map(f=>`<div class="form-field"><label>${esc(f.name)}</label>${f.type==='select'?`<select class="select" name="${f.key}">${f.options.map(o=>`<option ${o===f.value?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input class="input" name="${f.key}" type="${f.type||'text'}" value="${escAttr(f.value||'')}" placeholder="${escAttr(f.placeholder||'')}" required>`}</div>`).join('')}<div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
+  const formId='dynamicForm';$('#modal').innerHTML=`<h3>${esc(title)}</h3><form id="${formId}">${fields.map(f=>`<div class="form-field"><label>${esc(f.name)}</label>${f.type==='select'?`<select class="select" name="${f.key}">${f.options.map(o=>`<option ${o===f.value?'selected':''}>${esc(o)}</option>`).join('')}</select>`:`<input class="input ${f.type==='number'?'number-format':''}" name="${f.key}" type="${f.type||'text'}" value="${escAttr(f.type==='number' && f.value ? formatNumber(f.value) : (f.value||''))}" placeholder="${escAttr(f.placeholder||'')}" required>`}</div>`).join('')}<div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Guardar</button></div></form>`;
   $('#modalBackdrop').classList.remove('hidden');$('#'+formId).onsubmit=e=>{e.preventDefault();const val=Object.fromEntries(new FormData(e.target).entries());onSubmit(val);closeModal();};setTimeout(()=>$('#'+formId)?.querySelector('input,select')?.focus(),50);
 }
 function openSettings(){
-  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list"><button onclick="exportJSON()">💾 Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div><p class="helper">Tus cambios se guardan solamente en este dispositivo mediante localStorage. Exporta un JSON si quieres llevar tus datos a otro celular, PC o tableta.</p><div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input" inputmode="numeric" value="${Number(state.settings.usdToCop||4000)}"></div><div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
+  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list"><button onclick="exportJSON()">💾 Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div><p class="helper">Tus cambios se guardan solamente en este dispositivo mediante localStorage. Exporta un JSON si quieres llevar tus datos a otro celular, PC o tableta.</p><div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div><div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
   $('#modalBackdrop').classList.remove('hidden');$('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};
 }
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}

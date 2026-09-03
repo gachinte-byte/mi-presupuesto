@@ -13,7 +13,7 @@
 
 /* Modo organización: las flechas solo aparecen cuando el usuario lo activa. */
 .organize-only{display:none !important;}
-body.expense-organizing .organize-only{display:inline-flex !important;}
+body.expense-organizing .organize-only,body.savings-organizing .organize-only{display:inline-flex !important;}
 .organize-active{font-weight:700;}
 
 .title-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}

@@ -13,3 +13,7 @@ Aplicación web/PWA para presupuesto personal, pensada primero para iPhone.
 Subir todos los archivos a la raíz del repositorio de GitHub Pages.
 
 En iPhone: abrir la URL publicada en Safari → Compartir → Añadir a pantalla de inicio.
+
+
+### V14
+Incluye mover subcategorías/cuentas a otra categoría desde el modo Organizar, conservando todos los valores históricos.

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "currency": "COP",
+  "currentMonth": "2026-09",
+  "settings": { "usdToCop": 4000 },
+  "incomeItems": [
+    { "id": "inc-1", "name": "Salario AEI", "monthly": {} },
+    { "id": "inc-2", "name": "Canon Apartamento 404C", "monthly": {} },
+    { "id": "inc-3", "name": "Varios", "monthly": {} }
+  ],
+  "expenseItems": [
+    { "id": "exp-1", "category": "Hogar", "subcategory": "Mercado / Remesa en tiendas", "monthly": {} },
+    { "id": "exp-2", "category": "Hogar", "subcategory": "Pedidos Rappi y otros", "monthly": {} },
+    { "id": "exp-3", "category": "Hogar", "subcategory": "Administración Bosques de Chipichape", "monthly": {} },
+    { "id": "exp-4", "category": "Hogar", "subcategory": "Servicios públicos (Emcali, gas, Claro)", "monthly": {} },
+    { "id": "exp-5", "category": "Hogar", "subcategory": "Ana aseo 2 veces al mes", "monthly": {} },
+    { "id": "exp-6", "category": "Cuotas/suscripciones", "subcategory": "Netflix TC", "monthly": {} },
+    { "id": "exp-7", "category": "Cuotas/suscripciones", "subcategory": "Spotify", "monthly": {} },
+    { "id": "exp-8", "category": "Cuotas/suscripciones", "subcategory": "Strong Gym", "monthly": {} },
+    { "id": "exp-9", "category": "Personal", "subcategory": "Peluquería u otros / tratamiento pelo Diana", "monthly": {} },
+    { "id": "exp-10", "category": "Personal", "subcategory": "Arreglo uñas Diana y Gerardo (Ana)", "monthly": {} },
+    { "id": "exp-11", "category": "Pagos varios", "subcategory": "Imprevistos", "monthly": {} },
+    { "id": "exp-12", "category": "Ocio", "subcategory": "Salidas a comer por fuera restaurantes", "monthly": {} },
+    { "id": "exp-13", "category": "Personal", "subcategory": "Plan alimentación Ekinexys", "monthly": {} },
+    { "id": "exp-14", "category": "Personal", "subcategory": "Gym personalizado Gaachinte", "monthly": {} },
+    { "id": "exp-15", "category": "Personal", "subcategory": "Gym Gaachinte Bodytech", "monthly": {} }
+  ],
+  "assetItems": [
+    { "id": "ast-1", "category": "CDT", "name": "CDT virtual 0969", "currency": "COP", "monthly": {} },
+    { "id": "ast-2", "category": "FIDUCUENTA", "name": "Money Market", "currency": "COP", "monthly": {} },
+    { "id": "ast-3", "category": "AHORROS", "name": "Itaú Rentable", "currency": "COP", "monthly": {} },
+    { "id": "ast-4", "category": "INVERSIONES", "name": "Trii", "currency": "COP", "monthly": {} },
+    { "id": "ast-5", "category": "INVERSIONES", "name": "Binance", "currency": "USD", "monthly": {} },
+    { "id": "ast-6", "category": "DÓLARES", "name": "Caja fuerte", "currency": "USD", "monthly": {} },
+    { "id": "ast-7", "category": "Dividendos", "name": "Dividendos", "currency": "COP", "monthly": {} },
+    { "id": "ast-8", "category": "OTROS", "name": "Otros", "currency": "COP", "monthly": {} }
+  ],
+  "legacy2025": {
+    "2025-03": {
+      "income": { "inc-1": 6530000, "inc-2": 0, "inc-3": 0 },
+      "expenses": { "exp-1": 1650000, "exp-2": 850000, "exp-3": 354000, "exp-4": 750000, "exp-5": 170000, "exp-6": 44800, "exp-7": 21400, "exp-8": 13900, "exp-9": 135000, "exp-10": 120000, "exp-11": 150000, "exp-12": 660000, "exp-13": 200000, "exp-14": 550000, "exp-15": 120000 },
+      "assets": { "ast-1": 45757000, "ast-2": 14540120, "ast-3": 13868663, "ast-4": 2048707, "ast-5": 241 }
+    },
+    "2025-04": {
+      "income": { "inc-1": 6530000, "inc-2": 850000, "inc-3": 0 },
+      "expenses": { "exp-1": 1650000, "exp-2": 850000, "exp-3": 354000, "exp-4": 750000, "exp-5": 170000, "exp-6": 44800, "exp-7": 21400, "exp-8": 13900, "exp-9": 135000, "exp-10": 120000, "exp-11": 150000, "exp-12": 660000, "exp-13": 200000, "exp-14": 550000, "exp-15": 120000 },
+      "assets": {}
+    }
+  }
+}

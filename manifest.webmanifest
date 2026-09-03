@@ -1,0 +1,13 @@
+{
+  "name": "Mi Presupuesto",
+  "short_name": "Presupuesto",
+  "description": "Presupuesto personal simple y local.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#4f4a68",
+  "lang": "es-CO",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

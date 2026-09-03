@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4f4a68">
+  <meta name="description" content="Presupuesto personal simple, local y portable.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <title>Mi Presupuesto</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">PRESUPUESTO PERSONAL</div>
+      <h1>Mi Presupuesto</h1>
+    </div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Configuración">⚙️</button>
+  </header>
+
+  <main id="app" class="app-shell">
+    <section id="view-home" class="view active">
+      <div class="month-control card">
+        <button id="prevMonth" class="month-arrow" aria-label="Mes anterior">‹</button>
+        <div class="month-center">
+          <span class="label">MES</span>
+          <strong id="currentMonthLabel">Septiembre 2026</strong>
+        </div>
+        <button id="nextMonth" class="month-arrow" aria-label="Mes siguiente">›</button>
+      </div>
+
+      <div class="summary-grid">
+        <article class="metric-card income-card">
+          <span>💰 Ingresos</span>
+          <strong id="summaryIncome">$0</strong>
+        </article>
+        <article class="metric-card expense-card">
+          <span>💸 Gastos</span>
+          <strong id="summaryExpenses">$0</strong>
+        </article>
+        <article class="metric-card extra-card">
+          <span id="extraLabel">🟢 Extra disponible</span>
+          <strong id="summaryExtra">$0</strong>
+          <small>Ingresos − gastos</small>
+        </article>
+      </div>
+
+      <section class="section-card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">INGRESOS</span>
+            <h2>Este mes</h2>
+          </div>
+          <button class="text-btn" data-go="income">Editar</button>
+        </div>
+        <div id="homeIncomeList" class="mini-list"></div>
+        <div class="total-line"><span>Ingreso total</span><strong id="homeIncomeTotal">$0</strong></div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">GASTOS</span>
+            <h2>Por categoría</h2>
+          </div>
+          <button class="text-btn" data-go="expenses">Ver gastos</button>
+        </div>
+        <div id="homeExpenseList" class="category-list"></div>
+        <div class="total-line"><span>Gastos totales</span><strong id="homeExpenseTotal">$0</strong></div>
+      </section>
+
+      <section class="section-card investments-preview">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">MI DINERO</span>
+            <h2>Ahorros e inversiones</h2>
+          </div>
+          <button class="text-btn" data-go="savings">Ver saldos</button>
+        </div>
+        <div class="wealth-total" id="homeWealthTotal">$0 COP</div>
+        <div id="homeSavingsList" class="mini-list"></div>
+      </section>
+    </section>
+
+    <section id="view-expenses" class="view">
+      <div class="page-title-row">
+        <div>
+          <span class="eyebrow">SEGUNDA TABLA</span>
+          <h2>Gastos</h2>
+          <p>Registra el valor de cada categoría y subcategoría para el mes seleccionado.</p>
+        </div>
+        <button id="addExpenseBtn" class="primary-btn">＋ Gasto</button>
+      </div>
+      <div class="month-control compact card">
+        <button id="prevMonthExpenses" class="month-arrow">‹</button>
+        <strong id="expenseMonthLabel">Septiembre 2026</strong>
+        <button id="nextMonthExpenses" class="month-arrow">›</button>
+      </div>
+      <div id="expenseRows" class="rows-card"></div>
+      <div class="sticky-total">
+        <span>Gastos del mes</span>
+        <strong id="expensesViewTotal">$0</strong>
+      </div>
+    </section>
+
+    <section id="view-savings" class="view">
+      <div class="page-title-row">
+        <div>
+          <span class="eyebrow">TERCERA TABLA</span>
+          <h2>Ahorros e inversiones</h2>
+          <p>Solo actualiza el saldo de cada cuenta o inversión.</p>
+        </div>
+        <button id="addAssetBtn" class="primary-btn">＋ Cuenta</button>
+      </div>
+      <div class="month-control compact card">
+        <button id="prevMonthSavings" class="month-arrow">‹</button>
+        <strong id="savingsMonthLabel">Septiembre 2026</strong>
+        <button id="nextMonthSavings" class="month-arrow">›</button>
+      </div>
+      <div id="assetRows" class="rows-card"></div>
+      <div class="wealth-summary">
+        <div><span>Total COP</span><strong id="copTotal">$0</strong></div>
+        <div><span>Total USD</span><strong id="usdTotal">US$0</strong></div>
+      </div>
+    </section>
+
+    <section id="view-income" class="view">
+      <div class="page-title-row">
+        <div>
+          <span class="eyebrow">PRIMERA TABLA</span>
+          <h2>Ingresos</h2>
+          <p>Salario, arriendos y otros ingresos. Puedes copiar el mes anterior para ahorrar tiempo.</p>
+        </div>
+        <button id="addIncomeBtn" class="primary-btn">＋ Ingreso</button>
+      </div>
+      <div class="month-control compact card">
+        <button id="prevMonthIncome" class="month-arrow">‹</button>
+        <strong id="incomeMonthLabel">Septiembre 2026</strong>
+        <button id="nextMonthIncome" class="month-arrow">›</button>
+      </div>
+      <div class="quick-actions">
+        <button id="copyPreviousMonth" class="secondary-btn">↗ Copiar mes anterior</button>
+      </div>
+      <div id="incomeRows" class="rows-card"></div>
+      <div class="sticky-total">
+        <span>Ingreso del mes</span>
+        <strong id="incomeViewTotal">$0</strong>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <button class="nav-item active" data-view="home"><span>📊</span><small>Inicio</small></button>
+    <button class="nav-item" data-view="expenses"><span>💸</span><small>Gastos</small></button>
+    <button class="nav-item" data-view="savings"><span>🏦</span><small>Ahorros</small></button>
+    <button class="nav-item" data-view="income"><span>💰</span><small>Ingresos</small></button>
+  </nav>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div id="modal" class="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

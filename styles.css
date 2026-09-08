@@ -141,3 +141,26 @@ body.expense-organizing .central-expense-item .row-title strong,body.expense-org
   background:var(--purple-2);
   border-color:var(--purple-2);
 }
+
+/* V43: acciones suaves con el mismo contraste de las cabeceras de categoría */
+#view-expenses .quick-actions .secondary-btn,
+#view-expenses .central-expense-sync .secondary-btn,
+#view-savings .quick-actions .secondary-btn,
+#view-income .quick-actions .secondary-btn{
+  background:#e3e6ef;
+  color:var(--purple);
+  border:1px solid #d9dce5;
+}
+#view-expenses .quick-actions .secondary-btn,
+#view-expenses .central-expense-sync .secondary-btn,
+#view-savings .quick-actions .secondary-btn,
+#view-income .quick-actions .secondary-btn{
+  box-shadow:0 4px 12px rgba(32,27,45,.07);
+}
+#view-expenses .quick-actions .secondary-btn:active,
+#view-expenses .central-expense-sync .secondary-btn:active,
+#view-savings .quick-actions .secondary-btn:active,
+#view-income .quick-actions .secondary-btn:active{
+  background:#d9dce5;
+  border-color:#d0d3dd;
+}

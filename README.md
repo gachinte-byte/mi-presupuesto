@@ -17,3 +17,7 @@ En iPhone: abrir la URL publicada en Safari → Compartir → Añadir a pantalla
 
 ### V14
 Incluye mover subcategorías/cuentas a otra categoría desde el modo Organizar, conservando todos los valores históricos.
+
+
+## V20 — Catálogo central D1
+La sección Gastos usa las categorías y subcategorías activas de Cloudflare D1 como catálogo maestro. En esta etapa solo se sincroniza el catálogo; los valores mensuales se conectarán en la siguiente etapa.

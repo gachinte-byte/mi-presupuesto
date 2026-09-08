@@ -1,10 +1,11 @@
-# Mi Presupuesto — V23
+# Mi Presupuesto V27
 
-Etapa 2 de integración con Gastos IA / Cloudflare D1.
+Etapa 2 de integración con Cloudflare D1.
 
-- Categorías y subcategorías: catálogo oficial de D1, solo lectura.
-- Valores mensuales de Gastos: independientes de D1 y editables localmente.
-- Botón **Cargar valores de D1**: trae el resumen mensual por subcategoría y solo llena celdas que todavía no tienen un valor local. Nunca sobrescribe una edición manual.
-- Los cambios manuales en `mi-presupuesto` no escriben en D1.
-- Ingresos y Ahorros continúan funcionando localmente.
-- Excel export/import conserva los valores editables de Gastos.
+- Primero actualiza el catálogo oficial D1.
+- Después carga los valores mensuales desde `/presupuesto/gastos`.
+- Las categorías/subcategorías son de solo lectura y provienen de D1.
+- Los valores mensuales son locales e independientes de D1.
+- Los valores cargados desde D1 pueden actualizarse en una nueva carga.
+- Los valores modificados manualmente quedan protegidos y no se escriben en D1.
+- Ingresos y Ahorros permanecen locales.

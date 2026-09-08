@@ -137,34 +137,54 @@ async function syncCentralExpenseValues(month=currentMonth){
   const apiUrl=String(state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl){toast('Falta la URL del Worker.');return;}
   try{
+    // PASO 1: actualizar primero el catálogo oficial. Así los IDs que usamos
+    // para guardar los valores siempre corresponden al catálogo actual de D1.
+    const catRes=await fetch(`${apiUrl}/presupuesto/catalogo`,{headers:{'Accept':'application/json'},cache:'no-store'});
+    const catData=await catRes.json().catch(()=>null);
+    if(!catRes.ok || !catData?.ok || !Array.isArray(catData.categorias) || !Array.isArray(catData.subcategorias)){
+      throw new Error(catData?.error||`No se pudo actualizar el catálogo D1 (HTTP ${catRes.status})`);
+    }
+    state.centralCatalog={categorias:catData.categorias,subcategorias:catData.subcategorias};
+    state.centralCatalogFetchedAt=new Date().toISOString();
+    save();
+
+    // PASO 2: traer los valores mensuales ya traducidos por el Worker al
+    // catálogo actual. El Worker usa la misma lógica de /mes detallado.
     const chatId=String(state.settings.catalogChatId||'').trim();
     const qs=`mes=${encodeURIComponent(month)}${chatId?`&chat_id=${encodeURIComponent(chatId)}`:''}`;
     const res=await fetch(`${apiUrl}/presupuesto/gastos?${qs}`,{headers:{'Accept':'application/json'},cache:'no-store'});
     const data=await res.json().catch(()=>null);
     if(!res.ok || !data?.ok) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
-    let loaded=0, skipped=0;
+
+    let loaded=0, skipped=0, nonZero=0;
     for(const row of (data.subcategorias||[])){
       const subId=String(row.subcategoria_id||'').trim();
       if(!subId) continue;
       const key=centralExpenseKey(month,subId);
       const exists=Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key);
       const source=state.centralExpenseImported?.[key];
-      // D1 puede actualizar cualquier valor que originalmente provino de D1.
-      // Los valores editados manualmente quedan protegidos.
+      // Solo una edición explícitamente manual queda protegida. Los valores
+      // que vienen de versiones anteriores sin marca de origen, o que fueron
+      // cargados desde D1, se reemplazan por el valor actual de D1.
       if(exists && source==='manual'){ skipped++; continue; }
-      setCentralExpenseValue(month,subId,Number(row.total)||0,'d1'); loaded++;
+      const value=Number(row.total)||0;
+      setCentralExpenseValue(month,subId,value,'d1');
+      loaded++;
+      if(value!==0) nonZero++;
     }
     save();render();
+
     const movimientos=Number(data?.movimientos||0);
     const totalD1=Number(data?.total||0);
-    if(!loaded && !skipped && movimientos===0){
-      alert(`D1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`);
-    } else if(!loaded && !skipped){
-      alert(`D1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no devolvió subcategorías utilizables.`);
-    } else {
-      const noClas=Number(data?.debug?.noClasificados||0);
-      const extra=noClas?` · ${noClas} movimientos sin subcategoría`:' ';
-      toast(`D1: ${loaded} valores actualizados · ${skipped} valores manuales conservados${extra}`);
+    const noClas=Number(data?.debug?.noClasificados||0);
+    const catalogMsg=`Catálogo D1: ${catData.categorias.length} categorías · ${catData.subcategorias.length} subcategorías`;
+    if(movimientos===0){
+      alert(`${catalogMsg}\n\nD1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`);
+    }else if(nonZero===0 && skipped===0){
+      alert(`${catalogMsg}\n\nD1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no pudo asociar ningún movimiento a las subcategorías del catálogo.\n\nNo se modificaron valores manuales.`);
+    }else{
+      const extra=noClas?` · ${money(data.debug.unmatched?.reduce((s,x)=>s+Number(x.monto||0),0)||0)} sin subcategoría oficial`:'';
+      toast(`${catalogMsg} · ${nonZero} valores con gasto cargados · ${skipped} manuales conservados${extra}`);
     }
   }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
 }
@@ -424,7 +444,7 @@ function renderExpenses(){
   const wrap=$('#expenseRows');
   if(central){
     const groups=centralExpenseGroups();
-    wrap.innerHTML=`<div class="catalog-stage-note"><div><strong>☁️ Catálogo oficial de Cloudflare D1</strong><span>Las categorías y subcategorías vienen de D1. Los valores son independientes y editables en esta aplicación.</span></div><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Cargar valores de D1</button></div>` +
+    wrap.innerHTML=`<div class="catalog-stage-note"><div><strong>☁️ Catálogo oficial de Cloudflare D1</strong><span>Las categorías y subcategorías vienen de D1. Los valores son independientes y editables en esta aplicación.</span></div><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar D1 y cargar valores</button></div>` +
       (groups.map(cat=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
           <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>

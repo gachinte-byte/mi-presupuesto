@@ -81,3 +81,12 @@ body.expense-organizing .organize-only,body.savings-organizing .organize-only{di
 .central-value-wrap .value-arrow{flex:0 0 auto;width:14px;text-align:center;color:#aaa5b2;font-size:20px;font-weight:500;line-height:1}
 .central-expense-item .value-input{flex:1;min-width:0;margin-top:0!important;text-align:left!important;font-variant-numeric:tabular-nums}
 @media(max-width:430px){.central-expense-item{padding:11px 0 12px 7px}.central-value-wrap{gap:5px}.central-value-wrap .value-arrow{width:12px;font-size:19px}}
+
+/* V36: nombres personalizados locales y campos de gastos más limpios */
+.central-value-wrap{display:block;margin-top:7px}
+.central-value-wrap .value-input{width:100%;margin-top:0!important;text-align:left!important}
+.central-expense-item{padding-left:14px}
+.central-expense-item .row-title strong{font-size:13px}
+body.expense-organizing .central-expense-item .row-title strong,body.expense-organizing .central-catalog-card .category-title{cursor:default}
+.central-catalog-card .category-edit-btn{font-size:14px}
+.settings-advanced .secondary-btn{width:100%;margin-top:6px}

@@ -66,6 +66,8 @@ function normalize(data) {
   data.centralExpenseImported ||= {};
   data.centralCategoryOrder ||= [];
   data.centralSubcategoryOrder ||= {};
+  data.centralCategoryNames ||= {};
+  data.centralSubcategoryNames ||= {};
   data.settings.catalogChatId ||= '';
 
   // Orden personalizado SOLO para la sección de Gastos.
@@ -132,6 +134,36 @@ function centralCatalog(){
   if(!c || !Array.isArray(c.categorias) || !Array.isArray(c.subcategorias)) return null;
   return c;
 }
+function centralCategoryDisplayName(cat){
+  return String(state.centralCategoryNames?.[String(cat.id)] || cat.nombre || '');
+}
+function centralSubcategoryDisplayName(sub){
+  return String(state.centralSubcategoryNames?.[String(sub.id)] || sub.nombre || '');
+}
+function editCentralCategory(categoryId){
+  const c=centralCatalog()?.categorias?.find(x=>String(x.id)===String(categoryId)); if(!c)return;
+  const current=centralCategoryDisplayName(c);
+  openForm('Editar nombre de categoría',[{name:'Nombre',key:'name',type:'text',value:current}],val=>{
+    const name=String(val.name||'').trim(); if(!name)return;
+    const duplicate=(centralCatalog()?.categorias||[]).some(x=>String(x.id)!==String(c.id) && centralCategoryDisplayName(x).toLowerCase()===name.toLowerCase());
+    if(duplicate){alert('Ya existe una categoría con ese nombre.');return;}
+    state.centralCategoryNames ||= {}; state.centralCategoryNames[String(c.id)]=name; save(); renderExpenses(); toast('Nombre de categoría actualizado');
+  });
+}
+function editCentralSubcategory(categoryId,subcategoryId){
+  const sub=centralCatalog()?.subcategorias?.find(x=>String(x.id)===String(subcategoryId)); if(!sub)return;
+  const current=centralSubcategoryDisplayName(sub);
+  openForm('Editar nombre de subcategoría',[{name:'Nombre',key:'name',type:'text',value:current}],val=>{
+    const name=String(val.name||'').trim(); if(!name)return;
+    const duplicate=(centralCatalog()?.subcategorias||[]).some(x=>String(x.id)!==String(sub.id) && String(x.categoria_id)===String(categoryId) && centralSubcategoryDisplayName(x).toLowerCase()===name.toLowerCase());
+    if(duplicate){alert('Ya existe una subcategoría con ese nombre.');return;}
+    state.centralSubcategoryNames ||= {}; state.centralSubcategoryNames[String(sub.id)]=name; save(); renderExpenses(); toast('Nombre de subcategoría actualizado');
+  });
+}
+function resetCentralDisplayNames(){
+  if(!confirm('¿Restablecer los nombres oficiales de D1?'))return;
+  state.centralCategoryNames={}; state.centralSubcategoryNames={}; save(); renderExpenses(); toast('Nombres oficiales restaurados');
+}
 function centralExpenseGroups(){
   const c=centralCatalog();
   if(!c) return [];
@@ -154,7 +186,7 @@ function centralExpenseGroups(){
       const id=String(sub.id); if(!subOrder.includes(id)) subOrder.push(id);
     });
     state.centralSubcategoryOrder[String(cat.id)]=subOrder;
-    return {...cat,subcategorias:subOrder.map(id=>subById.get(id))};
+    return {...cat,displayName:centralCategoryDisplayName(cat),subcategorias:subOrder.map(id=>subById.get(id)).filter(Boolean).map(sub=>({...sub,displayName:centralSubcategoryDisplayName(sub)}))};
   });
 }
 function moveCentralCategory(categoryId,direction){
@@ -186,7 +218,7 @@ function parseD1Money(value){
   else n=Number(t);
   return Number.isFinite(n) ? Math.round(n) : 0;
 }
-function centralExpenseRows(month=currentMonth){ return centralExpenseGroups().flatMap(cat=>cat.subcategorias.map(sub=>({categoryId:cat.id,category:cat.nombre,subId:sub.id,subcategory:sub.nombre,value:getCentralExpenseValue(month,sub.id)}))); }
+function centralExpenseRows(month=currentMonth){ return centralExpenseGroups().flatMap(cat=>cat.subcategorias.map(sub=>({categoryId:cat.id,category:cat.displayName||cat.nombre,subId:sub.id,subcategory:sub.displayName||sub.nombre,value:getCentralExpenseValue(month,sub.id)}))); }
 function centralExpenseTotal(month=currentMonth){ return centralExpenseRows(month).reduce((s,x)=>s+x.value,0); }
 function centralCategoryTotals(month=currentMonth){ const map={}; centralExpenseRows(month).forEach(x=>{map[x.category]=(map[x.category]||0)+x.value;}); return Object.entries(map).filter(([,v])=>v!==0).sort((a,b)=>b[1]-a[1]); }
 async function syncCentralExpenseValues(month=currentMonth){
@@ -326,6 +358,8 @@ function bindEvents() {
     if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
     if (action === 'move-category-up') moveExpenseCategory(btn.dataset.category,-1);
     if (action === 'move-category-down') moveExpenseCategory(btn.dataset.category,1);
+    if (action === 'edit-central-category') editCentralCategory(btn.dataset.categoryId);
+    if (action === 'edit-central-subcategory') editCentralSubcategory(btn.dataset.categoryId,btn.dataset.subcategoryId);
     if (action === 'move-central-category-up') moveCentralCategory(btn.dataset.categoryId,-1);
     if (action === 'move-central-category-down') moveCentralCategory(btn.dataset.categoryId,1);
     if (action === 'move-central-subcategory-up') moveCentralSubcategory(btn.dataset.categoryId,btn.dataset.subcategoryId,-1);
@@ -533,15 +567,15 @@ function renderExpenses(){
     wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
       (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
-          <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
+          <div class="category-heading-info"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
           <div class="category-header-actions organize-only">
-            <button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
+            <button class="small-icon category-edit-btn organize-only" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-central-category" data-category-id="${escAttr(cat.id)}">✏️</button><button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
           </div>
         </div>
         <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const source=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]; const edited=source==='manual'; return `<div class="expense-item central-expense-item ${edited?'is-edited':''}">
-          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong>${edited?'<small class="source-badge edited-badge">✏️ Editado</small>':(source==='d1'?'<small class="source-badge d1-source-badge">☁️ D1</small>':'')}</div><div class="row-actions organize-only"><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
-          <div class="central-value-wrap"><span class="value-arrow" aria-hidden="true">›</span><input class="value-input" inputmode="numeric" aria-label="${esc(sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)"></div>
+          <div class="row-top"><div class="row-title"><strong>${esc(sub.displayName||sub.nombre)}</strong>${edited?'<small class="source-badge edited-badge">✏️ Editado</small>':(source==='d1'?'<small class="source-badge d1-source-badge">☁️ D1</small>':'')}</div><div class="row-actions organize-only"><button class="small-icon category-edit-btn organize-only" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" data-action="edit-central-subcategory" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}">✏️</button><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
+          <div class="central-value-wrap"><input class="value-input" inputmode="numeric" aria-label="${esc(sub.displayName||sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)"></div>
         </div>`}).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
       </section>`;}).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
     $('#expensesViewTotal').textContent=money(centralExpenseTotal());
@@ -990,7 +1024,7 @@ function openSettings(){
   <div class="settings-block"><strong>☁️ Conexión de gastos</strong><div class="form-field"><label>Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
   <button class="primary-btn" onclick="syncCentralCatalog()">↻ Actualizar conexión</button>
   ${renderCatalogSettings()}
-  <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div></details>
+  <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
   </div>
   <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes para revisarlo o modificar sus valores.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
   <div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div>

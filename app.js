@@ -112,6 +112,16 @@ function centralCatalog(){
   if(!c || !Array.isArray(c.categorias) || !Array.isArray(c.subcategorias)) return null;
   return c;
 }
+function centralExpenseGroups(){
+  const c=centralCatalog();
+  if(!c) return [];
+  const cats=(c.categorias||[]).filter(x=>Number(x.activa??1)!==0).slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es'));
+  return cats.map(cat=>({
+    ...cat,
+    subcategorias:(c.subcategorias||[]).filter(s=>s.categoria_id===cat.id && Number(s.activa??1)!==0).slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es'))
+  }));
+}
+function centralCatalogMode(){ return !!centralCatalog(); }
 function normalizedText(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
 function catalogComparison(){
   const c=centralCatalog();
@@ -145,8 +155,7 @@ function renderCatalogSettings(){
   const c=centralCatalog(), cmp=catalogComparison();
   if(!c) return `<div class="catalog-status catalog-off"><strong>⚪ Catálogo D1 no conectado</strong><span>La aplicación sigue funcionando con sus datos actuales. Esta etapa no cambia tus gastos.</span></div>`;
   const when=state.centralCatalogFetchedAt?new Date(state.centralCatalogFetchedAt).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'sin fecha';
-  const missing=cmp.missingLocal.length?`<br><strong>Locales sin coincidencia:</strong> ${cmp.missingLocal.map(esc).join(', ')}`:'';
-  return `<div class="catalog-status catalog-on"><strong>🟢 Catálogo D1 conectado</strong><span>${cmp.centralCategories} categorías centrales · ${c.subcategorias.length} subcategorías · ${cmp.matched}/${cmp.localCategories} categorías locales coinciden.</span><span>Última sincronización: ${esc(when)}${missing}</span></div>`;
+  return `<div class="catalog-status catalog-on"><strong>🟢 Catálogo D1 conectado y activo</strong><span>${c.categorias.length} categorías centrales · ${c.subcategorias.length} subcategorías.</span><span>Gastos usa ahora este catálogo como fuente oficial. Los valores mensuales se conectarán en la siguiente etapa.</span><span>Última sincronización: ${esc(when)}</span></div>`;
 }
 
 async function boot() {
@@ -352,9 +361,35 @@ function deleteIncome(id_){if(!confirm('¿Eliminar este ingreso y sus valores?')
 function openAddIncome(){openForm('Nuevo ingreso',[{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Salario AEI'}],val=>{state.incomeItems.push({id:id('inc'),name:val.name.trim()||'Nuevo ingreso',monthly:{}});save();render();toast('Ingreso creado');});}
 
 function renderExpenses(){
-  document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
-  const organizeBtn=$('#toggleExpenseOrganize'); if(organizeBtn){organizeBtn.textContent=expenseOrganizeMode?'✓ Terminar organización':'↕ Organizar'; organizeBtn.classList.toggle('organize-active',expenseOrganizeMode);}
+  const central=centralCatalogMode();
+  document.body.classList.toggle('expense-organizing', expenseOrganizeMode && !central);
+  const organizeBtn=$('#toggleExpenseOrganize');
+  const addBtn=$('#addExpenseBtn');
+  if(organizeBtn){
+    organizeBtn.style.display=central?'none':'';
+    organizeBtn.textContent=expenseOrganizeMode?'✓ Terminar organización':'↕ Organizar';
+    organizeBtn.classList.toggle('organize-active',expenseOrganizeMode && !central);
+  }
+  if(addBtn){
+    addBtn.style.display=central?'none':'';
+  }
   const wrap=$('#expenseRows');
+  if(central){
+    const groups=centralExpenseGroups();
+    wrap.innerHTML=`<div class="catalog-stage-note">☁️ <strong>Catálogo oficial de Cloudflare D1</strong><span>Estas son las categorías y subcategorías reales de Gastos IA. En esta etapa solo estamos conectando la estructura; los valores mensuales llegarán en la siguiente etapa.</span></div>` +
+      (groups.map(cat=>`<section class="expense-category-card central-catalog-card">
+        <div class="category-header">
+          <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total central-pending">Pendiente etapa 2</div></div>
+        </div>
+        <div class="category-items">${cat.subcategorias.map(sub=>`<div class="expense-item central-expense-item">
+          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>Subcategoría D1 · ID: ${esc(sub.id)}</small></div></div>
+          <div class="central-value-placeholder">Los valores mensuales se cargarán desde D1 en la etapa 2</div>
+        </div>`).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
+      </section>`).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
+    $('#expensesViewTotal').textContent='Pendiente etapa 2';
+    return;
+  }
+  document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
   const cats=orderedExpenseCategories();
   wrap.innerHTML=cats.map((cat,catIndex)=>{
     const items=orderedExpenseSubcategories(cat).map(sub=>state.expenseItems.find(x=>x.category===cat&&x.subcategory===sub)).filter(Boolean);
@@ -392,7 +427,7 @@ function expenseItemHTML(x,index,total,category){
   </div>`;
 }
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
-function editCategory(category){
+function editCategory(category){if(centralCatalogMode()){toast('El catálogo de D1 es oficial; cambia las categorías desde Gastos IA.');return;}
   openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{
     const newName=val.name.trim(); if(!newName){alert('Escribe un nombre para la categoría.');return;}
     if(newName===category)return;
@@ -404,7 +439,7 @@ function editCategory(category){
     save();render();toast('Categoría renombrada');
   });
 }
-function editExpense(id_){
+function editExpense(id_){if(centralCatalogMode()){toast('El catálogo de D1 es oficial; cambia las categorías desde Gastos IA.');return;}
   const x=state.expenseItems.find(i=>i.id===id_);if(!x)return;
   openSubcategoryForm('Editar subcategoría',x.category,x.subcategory,(subcategory)=>{
     const newName=subcategory.trim();if(!newName){alert('Escribe un nombre para la subcategoría.');return false;}
@@ -415,7 +450,7 @@ function editExpense(id_){
     save();render();toast('Subcategoría renombrada');return true;
   });
 }
-function deleteExpense(id_){
+function deleteExpense(id_){if(centralCatalogMode()){toast('El catálogo de D1 es oficial; no se modifica desde aquí.');return;}
   const item=state.expenseItems.find(x=>x.id===id_); if(!item)return;
   if(!confirm('¿Eliminar este gasto y sus valores?'))return;
   state.expenseItems=state.expenseItems.filter(x=>x.id!==id_);

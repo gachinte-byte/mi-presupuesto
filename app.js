@@ -44,6 +44,9 @@ function normalize(data) {
   data.expenseItems ||= [];
   data.assetItems ||= [];
   data.settings ||= { usdToCop: 4000 };
+  data.settings.catalogApiUrl ||= '';
+  data.centralCatalog ||= null;
+  data.centralCatalogFetchedAt ||= null;
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -102,6 +105,48 @@ function normalize(data) {
     delete data.legacy2025;
   }
   return data;
+}
+
+function centralCatalog(){
+  const c=state?.centralCatalog;
+  if(!c || !Array.isArray(c.categorias) || !Array.isArray(c.subcategorias)) return null;
+  return c;
+}
+function normalizedText(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
+function catalogComparison(){
+  const c=centralCatalog();
+  if(!c) return {connected:false,localCategories:categories().length,centralCategories:0,matched:0,missingLocal:categories()};
+  const centralNames=new Set(c.categorias.map(x=>normalizedText(x.nombre)));
+  const local=categories();
+  const matched=local.filter(x=>centralNames.has(normalizedText(x))).length;
+  return {connected:true,localCategories:local.length,centralCategories:c.categorias.length,matched,missingLocal:local.filter(x=>!centralNames.has(normalizedText(x)))};
+}
+async function syncCentralCatalog(){
+  const input=$('#catalogApiUrl');
+  const apiUrl=String(input?.value||state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
+  if(!apiUrl){alert('Primero escribe la URL pública de tu Worker de Gastos IA.');return;}
+  try{
+    const res=await fetch(`${apiUrl}/presupuesto/catalogo`,{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});
+    const data=await res.json().catch(()=>null);
+    if(!res.ok || !data?.ok || !Array.isArray(data.categorias) || !Array.isArray(data.subcategorias)) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
+    state.settings.catalogApiUrl=apiUrl;
+    state.centralCatalog={categorias:data.categorias,subcategorias:data.subcategorias};
+    state.centralCatalogFetchedAt=new Date().toISOString();
+    save();
+    closeModal();
+    const cmp=catalogComparison();
+    toast(`Catálogo D1 sincronizado: ${cmp.centralCategories} categorías`);
+    render();
+  }catch(err){
+    alert(`No se pudo conectar con el catálogo central.\n\n${err.message||err}\n\nVerifica la URL del Worker y que la ruta /presupuesto/catalogo esté publicada.`);
+  }
+}
+function renderCatalogSettings(){
+  const c=centralCatalog(), cmp=catalogComparison();
+  if(!c) return `<div class="catalog-status catalog-off"><strong>⚪ Catálogo D1 no conectado</strong><span>La aplicación sigue funcionando con sus datos actuales. Esta etapa no cambia tus gastos.</span></div>`;
+  const when=state.centralCatalogFetchedAt?new Date(state.centralCatalogFetchedAt).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'sin fecha';
+  const missing=cmp.missingLocal.length?`<br><strong>Locales sin coincidencia:</strong> ${cmp.missingLocal.map(esc).join(', ')}`:'';
+  return `<div class="catalog-status catalog-on"><strong>🟢 Catálogo D1 conectado</strong><span>${cmp.centralCategories} categorías centrales · ${c.subcategorias.length} subcategorías · ${cmp.matched}/${cmp.localCategories} categorías locales coinciden.</span><span>Última sincronización: ${esc(when)}${missing}</span></div>`;
 }
 
 async function boot() {
@@ -728,8 +773,21 @@ async function importExcel(file){
 }
 
 function openSettings(){
-  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list"><div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes completo para revisarlo o modificar sus valores en Excel. Al volver a importarlo, la app conservará las categorías y nombres originales.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div><div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div><p class="helper">En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, categorías, subcategorías, nombres ni moneda. La importación usa el ID para actualizar el mes exportado.</p><div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div><div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
-  $('#modalBackdrop').classList.remove('hidden');$('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};$('#excelImportFile').onchange=e=>{const file=e.target.files[0];if(file)importExcel(file);};
+  const apiUrl=state.settings.catalogApiUrl||'';
+  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list">
+  <div class="settings-block"><strong>☁️ Catálogo central de categorías</strong><p class="helper">Etapa 1: la aplicación puede leer las categorías y subcategorías oficiales desde Cloudflare D1. Esta conexión es solamente de lectura y no modifica los gastos diarios.</p>
+  <div class="form-field"><label>URL pública del Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
+  <button class="primary-btn" onclick="syncCentralCatalog()">🔄 Probar y sincronizar catálogo D1</button>
+  ${renderCatalogSettings()}
+  </div>
+  <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes completo para revisarlo o modificar sus valores en Excel. Al volver a importarlo, la app conservará las categorías y nombres originales.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
+  <div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div>
+  <p class="helper">En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, categorías, subcategorías, nombres ni moneda. La importación usa el ID para actualizar el mes exportado.</p>
+  <div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div>
+  <div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
+  $('#modalBackdrop').classList.remove('hidden');
+  $('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};
+  $('#excelImportFile').onchange=e=>{const file=e.target.files[0];if(file)importExcel(file);};
 }
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}

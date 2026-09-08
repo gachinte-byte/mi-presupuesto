@@ -161,7 +161,7 @@ D1 sí encontró ${money(Number(data.total||0))} en ${Number(data.movimientos||0
 D1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`;
       alert(`No se cargaron valores de D1.${detalle}`);
     } else {
-      toast(`D1: ${loaded} valores cargados · ${skipped} valores existentes conservados`);
+      toast(`D1: ${loaded} valores cargados · ${skipped} valores manuales conservados`);
     }
   }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
 }

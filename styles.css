@@ -109,3 +109,16 @@ body.expense-organizing .central-expense-item .row-title strong,body.expense-org
 .central-expense-item .value-input:hover{background:#fff}
 .central-expense-item .value-input:focus{background:#fff}
 @media(max-width:430px){.expense-top-total{margin:7px 0 9px;padding:12px 13px}.expense-top-total strong{font-size:20px}.central-catalog-card .category-header{padding:13px 12px}.central-catalog-card .category-items{padding:0 12px}.central-expense-item{padding-left:8px}}
+
+/* V39: Gastos más compacto en móvil, sin separadores punteados */
+.central-expense-item,
+.central-expense-item+.central-expense-item{border-top:0;border-bottom:0}
+.central-expense-item{padding:9px 0 10px 8px}
+.central-expense-item .value-input{margin-top:6px;min-height:42px;padding:9px 12px}
+.central-expense-item .source-badge{margin-top:2px}
+.central-catalog-card .category-items{padding:0 14px}
+@media(max-width:430px){
+  .central-expense-item{padding:8px 0 9px 7px}
+  .central-expense-item .value-input{min-height:40px;padding:8px 11px}
+  .central-catalog-card .category-items{padding:0 11px}
+}

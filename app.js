@@ -23,11 +23,26 @@ function money(value, currency='COP') { const n = Number(value || 0); return new
 function numberValue(value) {
   const text = String(value ?? '').trim();
   if (!text) return 0;
-  // Los campos de dinero usan punto como separador de miles (ej. 935.000).
-  // Al editar, quitamos los separadores antes de convertir a número para
-  // evitar que JavaScript interprete 935.000 como 935.
-  const normalized = text.replace(/[^0-9-]/g, '');
-  return Number(normalized) || 0;
+  // Dinero COP: aceptamos tanto miles colombianos (1.482.086) como
+  // decimales provenientes de D1 (1482085.55 o 1.482.085,55).
+  // IMPORTANTE: nunca quitar todos los puntos de un número decimal,
+  // porque 1482085.55 se convertiría erróneamente en 148208555.
+  let normalized = text.replace(/\s/g, '').replace(/[$COPcop]/g, '');
+  if (normalized.includes('.') && normalized.includes(',')) {
+    // 1.482.085,55 -> 1482085.55
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  } else if (normalized.includes(',')) {
+    // 1482085,55 -> 1482085.55
+    normalized = normalized.replace(',', '.');
+  } else if ((normalized.match(/\./g) || []).length > 1) {
+    // 1.482.085 -> 1482085
+    normalized = normalized.replace(/\./g, '');
+  } else if (/^-?\d+\.\d{3}$/.test(normalized)) {
+    // 935.000 -> 935000 (punto como separador de miles)
+    normalized = normalized.replace('.', '');
+  }
+  const n = Number(normalized.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
 }
 function formatNumber(value) { const n=numberValue(value); return n===0 ? '0' : new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n); }
 function focusNumberInput(el){ if(!el)return; const raw=numberValue(el.value); el.value=raw===0?'':String(raw); }
@@ -129,6 +144,28 @@ function centralExpenseKey(month, subId){ return `${month}|${subId}`; }
 function getCentralExpenseValue(month, subId){ return Number(state.centralExpenseValues?.[centralExpenseKey(month,subId)] || 0); }
 function hasCentralExpenseValue(month, subId){ return Object.prototype.hasOwnProperty.call(state.centralExpenseValues || {}, centralExpenseKey(month,subId)); }
 function setCentralExpenseValue(month, subId, value, source='manual'){ state.centralExpenseValues ||= {}; state.centralExpenseValues[centralExpenseKey(month,subId)] = Number(value)||0; state.centralExpenseImported ||= {}; state.centralExpenseImported[centralExpenseKey(month,subId)] = source; }
+function parseD1Money(value, monthlyTotal=0){
+  // D1 normalmente entrega números COP. También aceptamos texto monetario
+  // por compatibilidad con respuestas antiguas: 1.482.085,55.
+  let n;
+  if(typeof value === 'number') n=value;
+  else {
+    const t=String(value ?? '').trim();
+    if(!t) n=0;
+    else if(t.includes('.') && t.includes(',')) n=Number(t.replace(/\./g,'').replace(',','.'));
+    else if(t.includes(',') && !t.includes('.')) n=Number(t.replace(',','.'));
+    else n=Number(t);
+  }
+  if(!Number.isFinite(n)) return 0;
+  n=Math.round(n);
+  // Protección contra el patrón detectado en Compras con TC:
+  // 1.482.085,55 terminó representado como 148.208.555 (x100).
+  // Una subcategoría no puede superar el total mensual; corregimos SOLO
+  // la representación recibida, nunca el dato almacenado en D1.
+  const total=Math.round(Number(monthlyTotal)||0);
+  if(total>0 && n>total && n/100<=total) n=Math.round(n/100);
+  return n;
+}
 function centralExpenseRows(month=currentMonth){ return centralExpenseGroups().flatMap(cat=>cat.subcategorias.map(sub=>({categoryId:cat.id,category:cat.nombre,subId:sub.id,subcategory:sub.nombre,value:getCentralExpenseValue(month,sub.id)}))); }
 function centralExpenseTotal(month=currentMonth){ return centralExpenseRows(month).reduce((s,x)=>s+x.value,0); }
 function centralCategoryTotals(month=currentMonth){ const map={}; centralExpenseRows(month).forEach(x=>{map[x.category]=(map[x.category]||0)+x.value;}); return Object.entries(map).filter(([,v])=>v!==0).sort((a,b)=>b[1]-a[1]); }
@@ -156,6 +193,7 @@ async function syncCentralExpenseValues(month=currentMonth){
     const data=await res.json().catch(()=>null);
     if(!res.ok || !data?.ok) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
 
+    const totalD1=Math.round(Number(data?.total)||0);
     let loaded=0, skipped=0, nonZero=0;
     for(const row of (data.subcategorias||[])){
       const subId=String(row.subcategoria_id||'').trim();
@@ -167,7 +205,7 @@ async function syncCentralExpenseValues(month=currentMonth){
       // que vienen de versiones anteriores sin marca de origen, o que fueron
       // cargados desde D1, se reemplazan por el valor actual de D1.
       if(exists && source==='manual'){ skipped++; continue; }
-      const value=Number(row.total)||0;
+      const value=parseD1Money(row.total,totalD1);
       setCentralExpenseValue(month,subId,value,'d1');
       loaded++;
       if(value!==0) nonZero++;
@@ -175,7 +213,6 @@ async function syncCentralExpenseValues(month=currentMonth){
     save();render();
 
     const movimientos=Number(data?.movimientos||0);
-    const totalD1=Number(data?.total||0);
     const noClas=Number(data?.debug?.noClasificados||0);
     const catalogMsg=`Catálogo D1: ${catData.categorias.length} categorías · ${catData.subcategorias.length} subcategorías`;
     if(movimientos===0){

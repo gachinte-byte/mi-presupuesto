@@ -260,14 +260,13 @@ async function syncCentralExpenseValues(month=currentMonth){
 
     const movimientos=Number(data?.movimientos||0);
     const noClas=Number(data?.debug?.noClasificados||0);
-    const catalogMsg=`Catálogo D1: ${catData.categorias.length} categorías · ${catData.subcategorias.length} subcategorías`;
     if(movimientos===0){
-      alert(`${catalogMsg}\n\nD1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`);
+      alert(`No encontré gastos confirmados en ${monthLabel(month)} en D1.`);
     }else if(nonZero===0 && skipped===0){
-      alert(`${catalogMsg}\n\nD1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no pudo asociar ningún movimiento a las subcategorías del catálogo.\n\nNo se modificaron valores manuales.`);
+      alert(`D1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no pudo asociarlos al catálogo.\n\nNo se modificaron tus valores manuales.`);
     }else{
       const extra=noClas?` · ${money(data.debug.unmatched?.reduce((s,x)=>s+Number(x.monto||0),0)||0)} sin subcategoría oficial`:'';
-      toast(`${catalogMsg} · ${nonZero} valores con gasto cargados · ${skipped} manuales conservados${extra}`);
+      toast(`D1 actualizado · ${nonZero} valores cargados · ${skipped} editados conservados${extra}`);
     }
   }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
 }
@@ -540,8 +539,8 @@ function renderExpenses(){
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
           </div>
         </div>
-        <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const imported=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]==='d1';return `<div class="expense-item central-expense-item">
-          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>${imported?'☁️ D1':'✏️ Local'}</small></div><div class="row-actions organize-only"><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
+        <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const source=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]; const edited=source==='manual'; return `<div class="expense-item central-expense-item ${edited?'is-edited':''}">
+          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong>${edited?'<small class="edited-badge">Editado</small>':''}</div><div class="row-actions organize-only"><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
           <input class="value-input" inputmode="numeric" aria-label="${esc(sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)">
         </div>`}).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
       </section>`;}).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
@@ -987,9 +986,9 @@ async function importExcel(file){
 function openSettings(){
   const apiUrl=state.settings.catalogApiUrl||'';
   const chatId=state.settings.catalogChatId||'';
-  $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list">
+  $('#modal').innerHTML=`<h3>Configuración</h3><div class="settings-list">
   <div class="settings-block"><strong>☁️ Conexión de gastos</strong><div class="form-field"><label>Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
-  <button class="primary-btn" onclick="syncCentralCatalog()">↻ Probar conexión</button>
+  <button class="primary-btn" onclick="syncCentralCatalog()">↻ Actualizar conexión</button>
   ${renderCatalogSettings()}
   <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div></details>
   </div>

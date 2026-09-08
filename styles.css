@@ -122,3 +122,22 @@ body.expense-organizing .central-expense-item .row-title strong,body.expense-org
   .central-expense-item .value-input{min-height:40px;padding:8px 11px}
   .central-catalog-card .category-items{padding:0 11px}
 }
+
+/* V42: acciones de Gastos con el mismo lenguaje visual del total mensual */
+#view-expenses .quick-actions .secondary-btn,
+#view-expenses .central-expense-sync .secondary-btn{
+  background:var(--purple);
+  color:#fff;
+  border:1px solid var(--purple);
+}
+#view-expenses .quick-actions .secondary-btn{
+  box-shadow:0 4px 12px rgba(79,74,104,.12);
+}
+#view-expenses .central-expense-sync .secondary-btn{
+  box-shadow:0 5px 14px rgba(79,74,104,.14);
+}
+#view-expenses .quick-actions .secondary-btn:active,
+#view-expenses .central-expense-sync .secondary-btn:active{
+  background:var(--purple-2);
+  border-color:var(--purple-2);
+}

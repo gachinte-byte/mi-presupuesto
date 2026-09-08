@@ -90,3 +90,22 @@ body.expense-organizing .organize-only,body.savings-organizing .organize-only{di
 body.expense-organizing .central-expense-item .row-title strong,body.expense-organizing .central-catalog-card .category-title{cursor:default}
 .central-catalog-card .category-edit-btn{font-size:14px}
 .settings-advanced .secondary-btn{width:100%;margin-top:6px}
+
+
+/* V37: pulido visual final de Gastos */
+.expense-top-total{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 10px;padding:13px 15px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(135deg,#fff,#f8f7fb);box-shadow:0 5px 18px rgba(32,27,45,.055)}
+.expense-top-total span{font-size:11px;color:var(--muted);font-weight:850;text-transform:uppercase;letter-spacing:.05em}
+.expense-top-total strong{font-size:21px;font-weight:900;color:var(--navy);font-variant-numeric:tabular-nums}
+.central-catalog-card{box-shadow:0 6px 20px rgba(32,27,45,.06);border-color:#e1dfe7}
+.central-catalog-card .category-header{background:#f5f3f8;padding:14px 15px;border-bottom:1px solid #e7e4eb}
+.central-catalog-card .category-title{font-size:16px;line-height:1.2;letter-spacing:-.01em}
+.central-catalog-card .category-total{font-size:13px;font-weight:850;color:var(--navy);margin-top:4px}
+.central-catalog-card .category-items{padding:0 15px}
+.central-expense-item{padding:13px 0 14px 10px}
+.central-expense-item+.central-expense-item{border-top:0}
+.central-expense-item .row-title strong{font-size:13px;font-weight:750;color:var(--ink);line-height:1.3}
+.central-expense-item .source-badge{margin-top:3px}
+.central-expense-item .value-input{min-height:44px;padding:10px 12px;border-radius:11px;background:#fbfafc;box-shadow:none;font-size:16px;font-weight:650}
+.central-expense-item .value-input:hover{background:#fff}
+.central-expense-item .value-input:focus{background:#fff}
+@media(max-width:430px){.expense-top-total{margin:7px 0 9px;padding:12px 13px}.expense-top-total strong{font-size:20px}.central-catalog-card .category-header{padding:13px 12px}.central-catalog-card .category-items{padding:0 12px}.central-expense-item{padding-left:8px}}

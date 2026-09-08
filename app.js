@@ -578,6 +578,7 @@ function renderExpenses(){
           <div class="central-value-wrap"><input class="value-input" inputmode="numeric" aria-label="${esc(sub.displayName||sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)"></div>
         </div>`}).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
       </section>`;}).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
+    const topTotal=$('#expenseTopTotal'); if(topTotal) topTotal.querySelector('strong').textContent=money(centralExpenseTotal());
     $('#expensesViewTotal').textContent=money(centralExpenseTotal());
     return;
   }
@@ -600,6 +601,7 @@ function renderExpenses(){
       <div class="category-items">${items.map((x,index)=>expenseItemHTML(x,index,items.length,cat)).join('')}</div>
     </section>`;
   }).join('')||'<div class="empty">Agrega tu primer gasto.</div>';
+  const topTotal=$('#expenseTopTotal'); if(topTotal) topTotal.querySelector('strong').textContent=money(totals().expenses);
   $('#expensesViewTotal').textContent=money(totals().expenses);
 }
 function expenseItemHTML(x,index,total,category){

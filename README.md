@@ -1,41 +1,52 @@
-# Mi Presupuesto — V44
+# Mi Presupuesto — V45
 
-## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura)
+## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
-V44 parte directamente de la versión estable **V43** de `mi-presupuesto`.
+V45 parte directamente de la versión estable **V44** de `mi-presupuesto`.
 
 ### Objetivo de esta versión
 
-Conectar Ahorros e Ingresos con el Worker de `gastos-ia` mediante los endpoints de lectura de Fase 3, sin habilitar todavía escrituras en D1.
+Conectar Ahorros e Ingresos con el Worker de `gastos-ia` para que los valores mensuales se lean desde D1 y, cuando el usuario los cambie en la aplicación, se guarden nuevamente en D1.
 
 ### Endpoints utilizados
 
+Lectura:
 - `GET /presupuesto/ahorros`
 - `GET /presupuesto/ahorros/saldos?mes=YYYY-MM`
 - `GET /presupuesto/ingresos`
 - `GET /presupuesto/ingresos/valores?mes=YYYY-MM`
 
-### Comportamiento V44
+Escritura:
+- `POST /presupuesto/ahorros/saldos`
+- `POST /presupuesto/ingresos/valores`
+
+### Comportamiento V45
 
 - D1 proporciona el catálogo oficial de Ahorros: categorías y productos.
-- D1 proporciona los saldos mensuales disponibles de Ahorros.
+- D1 proporciona los saldos mensuales de Ahorros.
 - D1 proporciona el catálogo oficial de Ingresos: categorías y subcategorías.
-- D1 proporciona los valores mensuales disponibles de Ingresos.
-- Los valores recibidos de D1 se incorporan al estado local para mostrar la información en la aplicación.
-- Los históricos locales se conservan cuando D1 todavía no tiene registros para un mes concreto.
-- La aplicación vuelve a consultar D1 al cambiar de mes.
-- Los botones y edición existentes continúan funcionando localmente en esta etapa.
-- **Todavía NO existen escrituras desde `mi-presupuesto` hacia D1.**
+- D1 proporciona los valores mensuales de Ingresos.
+- Editar un saldo de Ahorros intenta guardarlo inmediatamente en D1.
+- Editar un ingreso intenta guardarlo inmediatamente en D1.
+- Si la escritura falla, el valor anterior se restaura localmente y se informa el error.
+- `Copiar saldos del mes anterior` guarda los valores copiados en D1.
+- `Copiar ingresos del mes anterior` guarda los valores copiados en D1.
+- Al cambiar de mes, la aplicación vuelve a consultar D1.
+- El guardado local continúa funcionando como respaldo de estado/interfaz.
 
-### Próxima etapa
+### Clave de escritura
 
-Después de validar V44, se agregará la escritura segura hacia D1 para que:
+La aplicación **no contiene la clave dentro del código**. El usuario debe introducir el valor de `PRESUPUESTO_WRITE_KEY` en Configuración. La clave se almacena en `localStorage` de ese dispositivo y se envía al Worker mediante el header `X-Presupuesto-Write-Key`.
 
-- editar un saldo de Ahorros guarde en `presupuesto_ahorro_saldos`;
-- editar un ingreso guarde en `presupuesto_ingreso_valores`;
-- copiar el mes anterior pueda persistir los nuevos valores en D1;
-- la escritura esté protegida mediante autorización en el Worker;
-- al recargar desde otro dispositivo, los cambios permanezcan en D1.
+**No publicar la clave en GitHub ni compartirla.** Si la clave se expone, debe rotarse en Cloudflare y actualizarse en la aplicación.
+
+### Seguridad del Worker
+
+Los endpoints de escritura del Worker requieren el secret `PRESUPUESTO_WRITE_KEY`. Además validan identificación del producto/subcategoría, formato de mes y valores numéricos. Las escrituras usan `UPSERT` sobre las claves únicas mensuales, evitando duplicados.
+
+### Alcance de V45
+
+Esta versión sincroniza y guarda **valores mensuales**. La estructura del catálogo (crear/eliminar/renombrar categorías, productos o subcategorías) sigue siendo una etapa posterior porque D1 es la fuente oficial y esos cambios requieren endpoints CRUD específicos.
 
 ### Datos D1 migrados y comprobados
 
@@ -49,12 +60,12 @@ Ingresos:
 - 3 subcategorías
 - 11 registros mensuales migrados
 
-### Seguridad / estabilidad
+### Estabilidad
 
 - No se modifica la lógica existente de Gastos/Telegram.
 - No se toca `calculadora-inversiones`.
-- V44 no agrega endpoints de escritura.
-- Antes de habilitar escritura se probará primero lectura y luego un cambio controlado.
+- V45 mantiene la interfaz base de V43/V44.
+- Antes de esta versión se validaron lectura y escritura controlada de Ahorros e Ingresos en D1.
 
 ### Versiones relevantes
 
@@ -62,3 +73,4 @@ Ingresos:
 - V41: correcciones PWA/iPhone.
 - V43: acabado visual estable de Gastos y botones secundarios.
 - V44: lectura de Ahorros e Ingresos desde D1.
+- V45: lectura + escritura de valores mensuales de Ahorros e Ingresos.

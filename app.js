@@ -60,6 +60,7 @@ function normalize(data) {
   data.assetItems ||= [];
   data.settings ||= { usdToCop: 4000 };
   data.settings.catalogApiUrl ||= '';
+  data.settings.presupuestoWriteKey ||= '';
   data.centralCatalog ||= null;
   data.centralCatalogFetchedAt ||= null;
   data.centralExpenseValues ||= {};
@@ -339,6 +340,19 @@ function renderCatalogSettings(){
   return `<div class="catalog-status catalog-on"><strong>🟢 D1 conectado</strong><span>${c.categorias.length} categorías · ${c.subcategorias.length} subcategorías</span><span>Última actualización: ${esc(when)}</span></div>`;
 }
 
+async function writePhase3Value(type,id_,month,value){
+  const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
+  const key=String(state?.settings?.presupuestoWriteKey||'').trim();
+  if(!apiUrl) throw new Error('No hay URL del Worker configurada.');
+  if(!key) throw new Error('Falta configurar la clave de escritura D1 en Configuración.');
+  const endpoint=type==='savings'?`${apiUrl}/presupuesto/ahorros/saldos`:`${apiUrl}/presupuesto/ingresos/valores`;
+  const body=type==='savings'?{producto_id:id_,mes,saldo:Number(value)}:{subcategoria_id:id_,mes,valor:Number(value)};
+  const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Presupuesto-Write-Key':key},body:JSON.stringify(body)});
+  let data=null; try{data=await res.json();}catch{}
+  if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+  return data;
+}
+
 async function syncPhase3ReadOnly(month=currentMonth){
   const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl) return;
@@ -602,7 +616,24 @@ function renderIncome(){
   const wrap=$('#incomeRows');wrap.innerHTML=state.incomeItems.map(x=>{const val=getMonthValue(x,currentMonth);return `<div class="data-row"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editIncome('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteIncome('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateIncome('${x.id}', this.value)"></div>`;}).join('')||'<div class="empty">Agrega tu primer ingreso.</div>';
   $('#incomeViewTotal').textContent=money(totals().income);
 }
-function updateIncome(id_,raw){const x=state.incomeItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Ingreso actualizado');}}
+async function updateIncome(id_,raw){
+  const x=state.incomeItems.find(i=>i.id===id_);
+  if(!x)return;
+  const value=numberValue(raw);
+  const previous=getMonthValue(x,currentMonth);
+  setMonthValue(x,currentMonth,value);
+  save();
+  render();
+  try{
+    await writePhase3Value('income', x.subcategoryId || x.id, currentMonth, value);
+    toast('Ingreso guardado en D1');
+  }catch(err){
+    setMonthValue(x,currentMonth,previous);
+    save();
+    render();
+    alert(`No se pudo guardar el ingreso en D1.\n\n${err.message||err}`);
+  }
+}
 function editIncome(id_){const x=state.incomeItems.find(i=>i.id===id_);if(!x)return;openForm('Editar ingreso',[{name:'Nombre',key:'name',type:'text',value:x.name}],val=>{x.name=val.name.trim()||x.name;save();render();toast('Ingreso actualizado');});}
 function deleteIncome(id_){if(!confirm('¿Eliminar este ingreso y sus valores?'))return;state.incomeItems=state.incomeItems.filter(x=>x.id!==id_);save();render();}
 function openAddIncome(){openForm('Nuevo ingreso',[{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Salario AEI'}],val=>{state.incomeItems.push({id:id('inc'),name:val.name.trim()||'Nuevo ingreso',monthly:{}});save();render();toast('Ingreso creado');});}
@@ -768,14 +799,38 @@ function copyPreviousExpenses(){
   if(!confirm(message))return;state.expenseItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Gastos copiados de ${monthLabel(prev)}`);
 }
 function currentMonthHasExpenses(){return state.expenseItems.some(x=>getMonthValue(x,currentMonth)!==0);}
-function copyPreviousMonth(){
-  const prev=shiftMonth(currentMonth,-1);if(!state.incomeItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
-  if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;state.incomeItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Ingresos copiados de ${monthLabel(prev)}`);
+async function copyPreviousMonth(){
+  const prev=shiftMonth(currentMonth,-1);
+  if(!state.incomeItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
+  if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;
+  const previousValues=state.incomeItems.map(x=>({x,value:getMonthValue(x,prev)}));
+  state.incomeItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+  save();render();toast('Guardando ingresos en D1…');
+  try{
+    for(const {x,value} of previousValues) await writePhase3Value('income', x.subcategoryId || x.id, currentMonth, value);
+    toast(`Ingresos copiados y guardados en D1`);
+  }catch(err){
+    alert(`La copia de ingresos quedó incompleta en D1.\n\n${err.message||err}`);
+    await syncPhase3ReadOnly(currentMonth);
+    render();
+  }
 }
-function copyPreviousSavings(){
-  const prev=shiftMonth(currentMonth,-1);if(!state.assetItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
+async function copyPreviousSavings(){
+  const prev=shiftMonth(currentMonth,-1);
+  if(!state.assetItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
   const overwrite=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
-  if(!confirm(message))return;state.assetItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Saldos copiados de ${monthLabel(prev)}`);
+  if(!confirm(message))return;
+  const previousValues=state.assetItems.map(x=>({x,value:getMonthValue(x,prev)}));
+  state.assetItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+  save();render();toast('Guardando saldos en D1…');
+  try{
+    for(const {x,value} of previousValues) await writePhase3Value('savings', x.id, currentMonth, value);
+    toast(`Saldos copiados y guardados en D1`);
+  }catch(err){
+    alert(`La copia de saldos quedó incompleta en D1.\n\n${err.message||err}`);
+    await syncPhase3ReadOnly(currentMonth);
+    render();
+  }
 }
 
 function renderAssets(){
@@ -791,7 +846,24 @@ function renderAssets(){
 }
 function assetItemHTML(x,index,total,category){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);const canUp=index>0,canDown=index<total-1;const eye=x.homeVisible===true?'👁️':'○';const eyeLabel=x.homeVisible===true?'Ocultar de Inicio':'Mostrar en Inicio';return `<div class="expense-item asset-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="home-watch-btn organize-only ${x.homeVisible===true?'is-on':''}" title="${eyeLabel}" aria-label="${eyeLabel}" data-action="toggle-asset-home" data-id="${escAttr(x.id)}">${eye}</button><button class="order-text-btn organize-only" title="Mover cuenta arriba" aria-label="Mover cuenta arriba" data-action="move-asset-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover cuenta abajo" aria-label="Mover cuenta abajo" data-action="move-asset-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canDown?'':'disabled'}>↓</button><button class="order-text-btn organize-only" title="Mover a otra categoría" aria-label="Mover a otra categoría" data-action="move-asset-subcategory-category" data-id="${escAttr(x.id)}">↗</button><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
 function toggleAssetHome(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;x.homeVisible=x.homeVisible!==true;save();render();toast(x.homeVisible?'Cuenta agregada a Inicio':'Cuenta retirada de Inicio');}
-function updateAsset(id_,raw){const x=state.assetItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Saldo actualizado');}}
+async function updateAsset(id_,raw){
+  const x=state.assetItems.find(i=>i.id===id_);
+  if(!x)return;
+  const value=numberValue(raw);
+  const previous=getMonthValue(x,currentMonth);
+  setMonthValue(x,currentMonth,value);
+  save();
+  render();
+  try{
+    await writePhase3Value('savings', x.id, currentMonth, value);
+    toast('Saldo guardado en D1');
+  }catch(err){
+    setMonthValue(x,currentMonth,previous);
+    save();
+    render();
+    alert(`No se pudo guardar el saldo en D1.\n\n${err.message||err}`);
+  }
+}
 function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:x.category},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],val=>{const oldCategory=x.category,oldName=x.name;x.category=val.category.trim()||x.category;x.name=val.name.trim()||x.name;x.currency=val.currency;state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(x.category))state.assetCategoryOrder.push(x.category);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[oldCategory] ||= [];state.assetSubcategoryOrder[oldCategory]=state.assetSubcategoryOrder[oldCategory].filter(n=>n!==oldName);state.assetSubcategoryOrder[x.category] ||= [];if(!state.assetSubcategoryOrder[x.category].includes(x.name))state.assetSubcategoryOrder[x.category].push(x.name);save();render();toast('Cuenta actualizada');});}
 function editAssetCategory(category){openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{const newName=val.name.trim();if(!newName||newName===category)return;if(orderedAssetCategories().some(c=>c.toLowerCase()===newName.toLowerCase()&&c!==category)){alert('Ya existe una categoría con ese nombre.');return;}state.assetItems.forEach(x=>{if(x.category===category)x.category=newName;});state.assetCategoryOrder=(state.assetCategoryOrder||[]).map(c=>c===category?newName:c);state.assetSubcategoryOrder ||= {};if(state.assetSubcategoryOrder[category]){state.assetSubcategoryOrder[newName]=state.assetSubcategoryOrder[category];delete state.assetSubcategoryOrder[category];}save();render();toast('Categoría renombrada');});}
 function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus saldos?'))return;const x=state.assetItems.find(i=>i.id===id_);state.assetItems=state.assetItems.filter(i=>i.id!==id_);if(x){state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[x.category]=(state.assetSubcategoryOrder[x.category]||[]).filter(n=>n!==x.name);}save();render();}
@@ -1085,6 +1157,8 @@ function openSettings(){
   <div class="settings-block"><strong>☁️ Conexión de gastos</strong><div class="form-field"><label>Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
   <button class="primary-btn" onclick="syncCentralCatalog()">↻ Actualizar conexión</button>
   ${renderCatalogSettings()}
+  <div class="form-field"><label>Clave de escritura D1</label><input id="presupuestoWriteKey" class="input" type="password" value="${escAttr(state.settings.presupuestoWriteKey||'')}" placeholder="PRESUPUESTO_WRITE_KEY"><p class="helper">Se guarda solo en este dispositivo y se usa para guardar Ahorros e Ingresos en D1. No la publiques en GitHub.</p></div>
+  <button class="secondary-btn" onclick="savePresupuestoWriteKey()">Guardar clave de escritura</button>
   <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
   </div>
   <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes para revisarlo o modificar sus valores.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
@@ -1096,6 +1170,11 @@ function openSettings(){
   $('#excelImportFile').onchange=e=>{const file=e.target.files[0];if(file)importExcel(file);};
 }
 
+function savePresupuestoWriteKey(){
+  state.settings.presupuestoWriteKey=String($('#presupuestoWriteKey')?.value||'').trim();
+  save();
+  toast(state.settings.presupuestoWriteKey?'Clave de escritura guardada en este dispositivo':'Clave de escritura eliminada');
+}
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
 function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}

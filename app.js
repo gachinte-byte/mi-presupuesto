@@ -64,6 +64,8 @@ function normalize(data) {
   data.centralCatalogFetchedAt ||= null;
   data.centralExpenseValues ||= {};
   data.centralExpenseImported ||= {};
+  data.centralCategoryOrder ||= [];
+  data.centralSubcategoryOrder ||= {};
   data.settings.catalogChatId ||= '';
 
   // Orden personalizado SOLO para la sección de Gastos.
@@ -133,11 +135,37 @@ function centralCatalog(){
 function centralExpenseGroups(){
   const c=centralCatalog();
   if(!c) return [];
-  const cats=(c.categorias||[]).filter(x=>Number(x.activa??1)!==0).slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es'));
-  return cats.map(cat=>({
-    ...cat,
-    subcategorias:(c.subcategorias||[]).filter(s=>s.categoria_id===cat.id && Number(s.activa??1)!==0).slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es'))
-  }));
+  state.centralCategoryOrder ||= [];
+  state.centralSubcategoryOrder ||= {};
+  const activeCats=(c.categorias||[]).filter(x=>Number(x.activa??1)!==0);
+  const catById=new Map(activeCats.map(x=>[String(x.id),x]));
+  const catOrder=state.centralCategoryOrder.filter(id=>catById.has(String(id))).map(id=>String(id));
+  activeCats.slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es')).forEach(cat=>{
+    const id=String(cat.id); if(!catOrder.includes(id)) catOrder.push(id);
+  });
+  state.centralCategoryOrder=catOrder;
+  return catOrder.map(id=>{
+    const cat=catById.get(id);
+    const activeSubs=(c.subcategorias||[]).filter(x=>String(x.categoria_id)===String(cat.id) && Number(x.activa??1)!==0);
+    const subById=new Map(activeSubs.map(x=>[String(x.id),x]));
+    const saved=Array.isArray(state.centralSubcategoryOrder[String(cat.id)])?state.centralSubcategoryOrder[String(cat.id)]:[];
+    const subOrder=saved.filter(id=>subById.has(String(id))).map(id=>String(id));
+    activeSubs.slice().sort((a,b)=>Number(a.orden||0)-Number(b.orden||0)||String(a.nombre||'').localeCompare(String(b.nombre||''),'es')).forEach(sub=>{
+      const id=String(sub.id); if(!subOrder.includes(id)) subOrder.push(id);
+    });
+    state.centralSubcategoryOrder[String(cat.id)]=subOrder;
+    return {...cat,subcategorias:subOrder.map(id=>subById.get(id))};
+  });
+}
+function moveCentralCategory(categoryId,direction){
+  const groups=centralExpenseGroups(); const order=groups.map(x=>String(x.id)); const i=order.indexOf(String(categoryId)); if(i<0)return;
+  const j=i+direction; if(j<0||j>=order.length)return;
+  [order[i],order[j]]=[order[j],order[i]]; state.centralCategoryOrder=order; save(); renderExpenses();
+}
+function moveCentralSubcategory(categoryId,subcategoryId,direction){
+  centralExpenseGroups(); const key=String(categoryId); const order=[...(state.centralSubcategoryOrder?.[key]||[])].map(String); const i=order.indexOf(String(subcategoryId)); if(i<0)return;
+  const j=i+direction; if(j<0||j>=order.length)return;
+  [order[i],order[j]]=[order[j],order[i]]; state.centralSubcategoryOrder[key]=order; save(); renderExpenses();
 }
 function centralCatalogMode(){ return !!centralCatalog(); }
 function centralExpenseKey(month, subId){ return `${month}|${subId}`; }
@@ -274,10 +302,10 @@ async function syncCentralCatalog(){
   }
 }
 function renderCatalogSettings(){
-  const c=centralCatalog(), cmp=catalogComparison();
-  if(!c) return `<div class="catalog-status catalog-off"><strong>⚪ Catálogo D1 no conectado</strong><span>La aplicación sigue funcionando con sus datos actuales. Esta etapa no cambia tus gastos.</span></div>`;
+  const c=centralCatalog();
+  if(!c) return `<div class="catalog-status catalog-off"><strong>⚪ D1 no conectado</strong><span>La app seguirá usando los datos guardados en este dispositivo.</span></div>`;
   const when=state.centralCatalogFetchedAt?new Date(state.centralCatalogFetchedAt).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'sin fecha';
-  return `<div class="catalog-status catalog-on"><strong>🟢 Catálogo D1 conectado y activo</strong><span>${c.categorias.length} categorías centrales · ${c.subcategorias.length} subcategorías.</span><span>Gastos usa ahora este catálogo como fuente oficial. Los valores mensuales se conectarán en la siguiente etapa.</span><span>Última sincronización: ${esc(when)}</span></div>`;
+  return `<div class="catalog-status catalog-on"><strong>🟢 D1 conectado</strong><span>${c.categorias.length} categorías · ${c.subcategorias.length} subcategorías</span><span>Última actualización: ${esc(when)}</span></div>`;
 }
 
 async function boot() {
@@ -299,6 +327,10 @@ function bindEvents() {
     if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
     if (action === 'move-category-up') moveExpenseCategory(btn.dataset.category,-1);
     if (action === 'move-category-down') moveExpenseCategory(btn.dataset.category,1);
+    if (action === 'move-central-category-up') moveCentralCategory(btn.dataset.categoryId,-1);
+    if (action === 'move-central-category-down') moveCentralCategory(btn.dataset.categoryId,1);
+    if (action === 'move-central-subcategory-up') moveCentralSubcategory(btn.dataset.categoryId,btn.dataset.subcategoryId,-1);
+    if (action === 'move-central-subcategory-down') moveCentralSubcategory(btn.dataset.categoryId,btn.dataset.subcategoryId,1);
     if (action === 'move-subcategory-up') moveExpenseSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
     if (action === 'move-subcategory-down') moveExpenseSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
     if (action === 'move-subcategory-category') openMoveExpense(btn.dataset.id);
@@ -485,13 +517,13 @@ function openAddIncome(){openForm('Nuevo ingreso',[{name:'Nombre',key:'name',typ
 
 function renderExpenses(){
   const central=centralCatalogMode();
-  document.body.classList.toggle('expense-organizing', expenseOrganizeMode && !central);
+  document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
   const organizeBtn=$('#toggleExpenseOrganize');
   const addBtn=$('#addExpenseBtn');
   if(organizeBtn){
-    organizeBtn.style.display=central?'none':'';
-    organizeBtn.textContent=expenseOrganizeMode?'✓ Terminar organización':'↕ Organizar';
-    organizeBtn.classList.toggle('organize-active',expenseOrganizeMode && !central);
+    organizeBtn.style.display='';
+    organizeBtn.textContent=expenseOrganizeMode?'✓ Listo':'↕ Ordenar';
+    organizeBtn.classList.toggle('organize-active',expenseOrganizeMode);
   }
   if(addBtn){
     addBtn.style.display=central?'none':'';
@@ -500,12 +532,16 @@ function renderExpenses(){
   if(central){
     const groups=centralExpenseGroups();
     wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
-      (groups.map(cat=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
+      (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
           <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
+          <div class="category-header-actions organize-only">
+            <button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
+            <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
+          </div>
         </div>
-        <div class="category-items">${cat.subcategorias.map(sub=>{const val=getCentralExpenseValue(currentMonth,sub.id);const imported=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]==='d1';return `<div class="expense-item central-expense-item">
-          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>${imported?'☁️ Cargado desde D1':'✏️ Valor editable localmente'}</small></div></div>
+        <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const imported=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]==='d1';return `<div class="expense-item central-expense-item">
+          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>${imported?'☁️ D1':'✏️ Local'}</small></div><div class="row-actions organize-only"><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
           <input class="value-input" inputmode="numeric" aria-label="${esc(sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)">
         </div>`}).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
       </section>`;}).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
@@ -952,20 +988,20 @@ function openSettings(){
   const apiUrl=state.settings.catalogApiUrl||'';
   const chatId=state.settings.catalogChatId||'';
   $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list">
-  <div class="settings-block"><strong>☁️ Catálogo central de categorías</strong><p class="helper">Etapa 1: la aplicación puede leer las categorías y subcategorías oficiales desde Cloudflare D1. Esta conexión es solamente de lectura y no modifica los gastos diarios.</p>
-  <div class="form-field"><label>URL pública del Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
-  <button class="primary-btn" onclick="syncCentralCatalog()">🔄 Probar y sincronizar catálogo D1</button><div class="form-field" style="margin-top:10px"><label>Chat ID de Telegram (opcional)</label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Déjalo vacío si D1 solo tiene un chat"></div>
+  <div class="settings-block"><strong>☁️ Conexión de gastos</strong><div class="form-field"><label>Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
+  <button class="primary-btn" onclick="syncCentralCatalog()">↻ Probar conexión</button>
   ${renderCatalogSettings()}
+  <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div></details>
   </div>
-  <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes completo para revisarlo o modificar sus valores en Excel. Al volver a importarlo, la app conservará las categorías y nombres originales.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
+  <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes para revisarlo o modificar sus valores.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
   <div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div>
-  <p class="helper">En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, categorías, subcategorías, nombres ni moneda. La importación usa el ID para actualizar el mes exportado.</p>
   <div class="form-field" style="margin-top:14px"><label>Tasa de referencia USD → COP</label><input id="usdRate" class="input number-format" inputmode="numeric" value="${formatNumber(state.settings.usdToCop||4000)}"></div>
   <div class="form-actions"><button class="secondary-btn" onclick="closeModal()">Cerrar</button><button class="primary-btn" onclick="saveRate()">Guardar tasa</button></div><input id="importFile" type="file" accept="application/json,.json" style="display:none">`;
   $('#modalBackdrop').classList.remove('hidden');
   $('#importFile').onchange=e=>{const file=e.target.files[0];if(file)importJSON(file);};
   $('#excelImportFile').onchange=e=>{const file=e.target.files[0];if(file)importExcel(file);};
 }
+
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
 function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}

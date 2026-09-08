@@ -153,7 +153,16 @@ async function syncCentralExpenseValues(month=currentMonth){
       setCentralExpenseValue(month,row.subcategoria_id,Number(row.total)||0,'d1'); loaded++;
     }
     save();render();
-    toast(`D1: ${loaded} valores cargados · ${skipped} valores existentes conservados`);
+    if(!loaded && !skipped){
+      const detalle = Number(data?.total||0) ? `
+
+D1 sí encontró ${money(Number(data.total||0))} en ${Number(data.movimientos||0)} movimientos, pero ninguno quedó asociado a una subcategoría del catálogo.` : `
+
+D1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`;
+      alert(`No se cargaron valores de D1.${detalle}`);
+    } else {
+      toast(`D1: ${loaded} valores cargados · ${skipped} valores existentes conservados`);
+    }
   }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
 }
 function normalizedText(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}

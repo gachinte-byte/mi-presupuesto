@@ -339,6 +339,59 @@ function renderCatalogSettings(){
   return `<div class="catalog-status catalog-on"><strong>🟢 D1 conectado</strong><span>${c.categorias.length} categorías · ${c.subcategorias.length} subcategorías</span><span>Última actualización: ${esc(when)}</span></div>`;
 }
 
+async function syncPhase3ReadOnly(month=currentMonth){
+  const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
+  if(!apiUrl) return;
+  try{
+    const [aCatRes,aBalRes,iCatRes,iValRes]=await Promise.all([
+      fetch(`${apiUrl}/presupuesto/ahorros`,{cache:'no-store'}),
+      fetch(`${apiUrl}/presupuesto/ahorros/saldos?mes=${encodeURIComponent(month)}`,{cache:'no-store'}),
+      fetch(`${apiUrl}/presupuesto/ingresos`,{cache:'no-store'}),
+      fetch(`${apiUrl}/presupuesto/ingresos/valores?mes=${encodeURIComponent(month)}`,{cache:'no-store'})
+    ]);
+    if(!aCatRes.ok||!aBalRes.ok||!iCatRes.ok||!iValRes.ok) throw new Error('No se pudieron leer todos los datos de Fase 3');
+    const [aCat,aBal,iCat,iVal]=await Promise.all([aCatRes.json(),aBalRes.json(),iCatRes.json(),iValRes.json()]);
+    if(aCat?.ok && Array.isArray(aCat.productos)){
+      const existingById=new Map(state.assetItems.map(x=>[String(x.id),x]));
+      const merged=[];
+      for(const product of aCat.productos){
+        const old=existingById.get(String(product.id));
+        const x=old||{id:product.id,category:'OTROS',name:product.nombre,currency:product.moneda,monthly:{}};
+        ensureMonthly(x);
+        x.category=(aCat.categorias||[]).find(c=>String(c.id)===String(product.categoria_id))?.nombre || x.category || 'OTROS';
+        x.name=product.nombre;
+        x.currency=product.moneda;
+        if(typeof x.homeVisible!=='boolean') x.homeVisible=Boolean(product.home_visible);
+        merged.push(x);
+      }
+      state.assetItems=merged;
+      state.assetCategoryOrder=(aCat.categorias||[]).map(c=>c.nombre);
+      state.assetSubcategoryOrder={};
+      for(const c of (aCat.categorias||[])) state.assetSubcategoryOrder[c.nombre]=(aCat.productos||[]).filter(x=>String(x.categoria_id)===String(c.id)).sort((a,b)=>(a.orden||0)-(b.orden||0)).map(x=>x.nombre);
+      if(aBal?.ok && Array.isArray(aBal.saldos)){
+        for(const row of aBal.saldos){const x=state.assetItems.find(i=>String(i.id)===String(row.producto_id));if(x)setMonthValue(x,month,row.saldo);}
+      }
+    }
+    if(iCat?.ok && Array.isArray(iCat.subcategorias)){
+      const existingById=new Map(state.incomeItems.map(x=>[String(x.id),x]));
+      const categoryById=new Map((iCat.categorias||[]).map(c=>[String(c.id),c.nombre]));
+      state.incomeItems=iCat.subcategorias.map(sub=>{
+        const old=existingById.get(String(sub.id));
+        const x=old||{id:sub.id,name:sub.nombre,monthly:{}};
+        ensureMonthly(x); x.name=sub.nombre; x.category=categoryById.get(String(sub.categoria_id))||x.category||''; x.subcategoryId=sub.id; return x;
+      });
+      if(iVal?.ok && Array.isArray(iVal.valores)){
+        for(const row of iVal.valores){const x=state.incomeItems.find(i=>String(i.id)===String(row.subcategoria_id));if(x)setMonthValue(x,month,row.valor);}
+      }
+    }
+    state.phase3ReadOnlySyncedAt=new Date().toISOString();
+    save();
+  }catch(err){
+    console.warn('Fase 3 lectura no disponible:',err);
+    toast('No se pudo actualizar Ahorros e Ingresos desde D1');
+  }
+}
+
 async function boot() {
   const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('miPresupuesto.v1');
   if (saved) { try { state=normalize(JSON.parse(saved)); currentMonth=state.currentMonth||currentMonth; } catch { state=null; } }
@@ -346,7 +399,11 @@ async function boot() {
   analyticsYear = Number(currentMonth.slice(0,4));
   autoCarryJanuarySavings();
   save();
-  bindEvents(); render(); registerSW();
+  bindEvents();
+  render();
+  await syncPhase3ReadOnly(currentMonth);
+  render();
+  registerSW();
 }
 
 function bindEvents() {
@@ -406,12 +463,14 @@ function bindEvents() {
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
-function changeMonth(delta){
+async function changeMonth(delta){
   const next=shiftMonth(currentMonth,delta);
   currentMonth=next;
   analyticsYear=Number(currentMonth.slice(0,4));
   autoCarryJanuarySavings();
-  save();render();
+  save(); render();
+  await syncPhase3ReadOnly(currentMonth);
+  render();
 }
 function autoCarryJanuarySavings(){
   if(!state || !currentMonth.endsWith('-01')) return;

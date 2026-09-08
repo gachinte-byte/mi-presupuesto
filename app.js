@@ -346,7 +346,7 @@ async function writePhase3Value(type,id_,month,value){
   if(!apiUrl) throw new Error('No hay URL del Worker configurada.');
   if(!key) throw new Error('Falta configurar la clave de escritura D1 en Configuración.');
   const endpoint=type==='savings'?`${apiUrl}/presupuesto/ahorros/saldos`:`${apiUrl}/presupuesto/ingresos/valores`;
-  const body=type==='savings'?{producto_id:id_,mes,saldo:Number(value)}:{subcategoria_id:id_,mes,valor:Number(value)};
+  const body=type==='savings'?{producto_id:id_,mes:month,saldo:Number(value)}:{subcategoria_id:id_,mes:month,valor:Number(value)};
   const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-Presupuesto-Write-Key':key},body:JSON.stringify(body)});
   let data=null; try{data=await res.json();}catch{}
   if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);

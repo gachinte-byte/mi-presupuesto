@@ -799,35 +799,48 @@ function copyPreviousExpenses(){
   if(!confirm(message))return;state.expenseItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Gastos copiados de ${monthLabel(prev)}`);
 }
 function currentMonthHasExpenses(){return state.expenseItems.some(x=>getMonthValue(x,currentMonth)!==0);}
+async function fetchPhase3PreviousValues(type,month){
+  const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
+  if(!apiUrl) throw new Error('No hay URL del Worker configurada.');
+  const endpoint=type==='savings'?`${apiUrl}/presupuesto/ahorros/saldos?mes=${encodeURIComponent(month)}`:`${apiUrl}/presupuesto/ingresos/valores?mes=${encodeURIComponent(month)}`;
+  const res=await fetch(endpoint,{cache:'no-store'});
+  const data=await res.json().catch(()=>null);
+  if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+  return type==='savings'?(Array.isArray(data.saldos)?data.saldos:[]):(Array.isArray(data.valores)?data.valores:[]);
+}
 async function copyPreviousMonth(){
   const prev=shiftMonth(currentMonth,-1);
-  if(!state.incomeItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
-  if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;
-  const previousValues=state.incomeItems.map(x=>({x,value:getMonthValue(x,prev)}));
-  state.incomeItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
-  save();render();toast('Guardando ingresos en D1…');
   try{
+    const rows=await fetchPhase3PreviousValues('income',prev);
+    const byId=new Map(rows.map(r=>[String(r.subcategoria_id),Number(r.valor)||0]));
+    if(!rows.some(r=>(Number(r.valor)||0)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
+    if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;
+    const previousValues=state.incomeItems.map(x=>({x,value:byId.get(String(x.subcategoryId||x.id))??getMonthValue(x,prev)}));
+    state.incomeItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+    save();render();toast('Guardando ingresos en D1…');
     for(const {x,value} of previousValues) await writePhase3Value('income', x.subcategoryId || x.id, currentMonth, value);
     toast(`Ingresos copiados y guardados en D1`);
   }catch(err){
-    alert(`La copia de ingresos quedó incompleta en D1.\n\n${err.message||err}`);
+    alert(`No se pudieron copiar los ingresos desde ${monthLabel(prev)}.\n\n${err.message||err}`);
     await syncPhase3ReadOnly(currentMonth);
     render();
   }
 }
 async function copyPreviousSavings(){
   const prev=shiftMonth(currentMonth,-1);
-  if(!state.assetItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
-  const overwrite=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
-  if(!confirm(message))return;
-  const previousValues=state.assetItems.map(x=>({x,value:getMonthValue(x,prev)}));
-  state.assetItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
-  save();render();toast('Guardando saldos en D1…');
   try{
+    const rows=await fetchPhase3PreviousValues('savings',prev);
+    const byId=new Map(rows.map(r=>[String(r.producto_id),Number(r.saldo)||0]));
+    if(!rows.some(r=>(Number(r.saldo)||0)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
+    const overwrite=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
+    if(!confirm(message))return;
+    const previousValues=state.assetItems.map(x=>({x,value:byId.get(String(x.id))??getMonthValue(x,prev)}));
+    state.assetItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+    save();render();toast('Guardando saldos en D1…');
     for(const {x,value} of previousValues) await writePhase3Value('savings', x.id, currentMonth, value);
     toast(`Saldos copiados y guardados en D1`);
   }catch(err){
-    alert(`La copia de saldos quedó incompleta en D1.\n\n${err.message||err}`);
+    alert(`No se pudieron copiar los saldos desde ${monthLabel(prev)}.\n\n${err.message||err}`);
     await syncPhase3ReadOnly(currentMonth);
     render();
   }

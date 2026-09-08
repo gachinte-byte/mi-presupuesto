@@ -145,7 +145,11 @@ async function syncCentralExpenseValues(month=currentMonth){
     let loaded=0, skipped=0;
     for(const row of (data.subcategorias||[])){
       const key=centralExpenseKey(month,row.subcategoria_id);
-      if(Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key)){ skipped++; continue; }
+      const exists=Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key);
+      const source=state.centralExpenseImported?.[key];
+      // Un valor que vino de D1 se puede actualizar en una nueva carga.
+      // Un valor editado manualmente queda protegido y nunca se sobrescribe.
+      if(exists && source!=='d1'){ skipped++; continue; }
       setCentralExpenseValue(month,row.subcategoria_id,Number(row.total)||0,'d1'); loaded++;
     }
     save();render();

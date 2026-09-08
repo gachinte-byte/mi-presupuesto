@@ -1,4 +1,4 @@
-# Mi Presupuesto — V22
+# Mi Presupuesto — V23
 
 Etapa 2 de integración con Gastos IA / Cloudflare D1.
 

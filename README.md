@@ -1,15 +1,10 @@
-# Mi Presupuesto V27
+# Mi Presupuesto — V35
 
-Etapa 2 de integración con Cloudflare D1.
+Ajuste visual de Gastos sobre V34.
 
-- Primero actualiza el catálogo oficial D1.
-- Después carga los valores mensuales desde `/presupuesto/gastos`.
-- Las categorías/subcategorías son de solo lectura y provienen de D1.
-- Los valores mensuales son locales e independientes de D1.
-- Los valores cargados desde D1 pueden actualizarse en una nueva carga.
-- Los valores modificados manualmente quedan protegidos y no se escriben en D1.
-- Ingresos y Ahorros permanecen locales.
-
-
-## V30
-Corrección de montos D1 con decimales/escala 100x; carga del catálogo antes de valores.
+- Valores de categoría mantienen el total alineado como antes.
+- Subcategorías quedan ligeramente indentadas.
+- Textboxes de gastos vuelven a tener el texto alineado a la izquierda.
+- Se agrega una flecha discreta antes de cada textbox.
+- Se recuperan las marcas de procedencia: ☁️ D1 y ✏️ Editado.
+- No cambia la lógica de D1, edición manual, Ingresos ni Ahorros.

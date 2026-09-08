@@ -11,5 +11,5 @@ Etapa 2 de integración con Cloudflare D1.
 - Ingresos y Ahorros permanecen locales.
 
 
-## V29
+## V30
 Corrección de montos D1 con decimales/escala 100x; carga del catálogo antes de valores.

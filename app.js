@@ -144,24 +144,27 @@ async function syncCentralExpenseValues(month=currentMonth){
     if(!res.ok || !data?.ok) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
     let loaded=0, skipped=0;
     for(const row of (data.subcategorias||[])){
-      const key=centralExpenseKey(month,row.subcategoria_id);
+      const subId=String(row.subcategoria_id||'').trim();
+      if(!subId) continue;
+      const key=centralExpenseKey(month,subId);
       const exists=Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key);
       const source=state.centralExpenseImported?.[key];
-      // Un valor que vino de D1 se puede actualizar en una nueva carga.
-      // Un valor editado manualmente queda protegido y nunca se sobrescribe.
-      if(exists && source!=='d1'){ skipped++; continue; }
-      setCentralExpenseValue(month,row.subcategoria_id,Number(row.total)||0,'d1'); loaded++;
+      // D1 puede actualizar cualquier valor que originalmente provino de D1.
+      // Los valores editados manualmente quedan protegidos.
+      if(exists && source==='manual'){ skipped++; continue; }
+      setCentralExpenseValue(month,subId,Number(row.total)||0,'d1'); loaded++;
     }
     save();render();
-    if(!loaded && !skipped){
-      const detalle = Number(data?.total||0) ? `
-
-D1 sí encontró ${money(Number(data.total||0))} en ${Number(data.movimientos||0)} movimientos, pero ninguno quedó asociado a una subcategoría del catálogo.` : `
-
-D1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`;
-      alert(`No se cargaron valores de D1.${detalle}`);
+    const movimientos=Number(data?.movimientos||0);
+    const totalD1=Number(data?.total||0);
+    if(!loaded && !skipped && movimientos===0){
+      alert(`D1 no encontró gastos confirmados para ${monthLabel(month)} con el chat configurado.`);
+    } else if(!loaded && !skipped){
+      alert(`D1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no devolvió subcategorías utilizables.`);
     } else {
-      toast(`D1: ${loaded} valores cargados · ${skipped} valores manuales conservados`);
+      const noClas=Number(data?.debug?.noClasificados||0);
+      const extra=noClas?` · ${noClas} movimientos sin subcategoría`:' ';
+      toast(`D1: ${loaded} valores actualizados · ${skipped} valores manuales conservados${extra}`);
     }
   }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
 }

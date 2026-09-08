@@ -47,6 +47,9 @@ function normalize(data) {
   data.settings.catalogApiUrl ||= '';
   data.centralCatalog ||= null;
   data.centralCatalogFetchedAt ||= null;
+  data.centralExpenseValues ||= {};
+  data.centralExpenseImported ||= {};
+  data.settings.catalogChatId ||= '';
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -122,6 +125,33 @@ function centralExpenseGroups(){
   }));
 }
 function centralCatalogMode(){ return !!centralCatalog(); }
+function centralExpenseKey(month, subId){ return `${month}|${subId}`; }
+function getCentralExpenseValue(month, subId){ return Number(state.centralExpenseValues?.[centralExpenseKey(month,subId)] || 0); }
+function hasCentralExpenseValue(month, subId){ return Object.prototype.hasOwnProperty.call(state.centralExpenseValues || {}, centralExpenseKey(month,subId)); }
+function setCentralExpenseValue(month, subId, value, source='manual'){ state.centralExpenseValues ||= {}; state.centralExpenseValues[centralExpenseKey(month,subId)] = Number(value)||0; state.centralExpenseImported ||= {}; state.centralExpenseImported[centralExpenseKey(month,subId)] = source; }
+function centralExpenseRows(month=currentMonth){ return centralExpenseGroups().flatMap(cat=>cat.subcategorias.map(sub=>({categoryId:cat.id,category:cat.nombre,subId:sub.id,subcategory:sub.nombre,value:getCentralExpenseValue(month,sub.id)}))); }
+function centralExpenseTotal(month=currentMonth){ return centralExpenseRows(month).reduce((s,x)=>s+x.value,0); }
+function centralCategoryTotals(month=currentMonth){ const map={}; centralExpenseRows(month).forEach(x=>{map[x.category]=(map[x.category]||0)+x.value;}); return Object.entries(map).filter(([,v])=>v!==0).sort((a,b)=>b[1]-a[1]); }
+async function syncCentralExpenseValues(month=currentMonth){
+  if(!centralCatalogMode()){toast('Primero conecta el catálogo D1.');return;}
+  const apiUrl=String(state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
+  if(!apiUrl){toast('Falta la URL del Worker.');return;}
+  try{
+    const chatId=String(state.settings.catalogChatId||'').trim();
+    const qs=`mes=${encodeURIComponent(month)}${chatId?`&chat_id=${encodeURIComponent(chatId)}`:''}`;
+    const res=await fetch(`${apiUrl}/presupuesto/gastos?${qs}`,{headers:{'Accept':'application/json'},cache:'no-store'});
+    const data=await res.json().catch(()=>null);
+    if(!res.ok || !data?.ok) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
+    let loaded=0, skipped=0;
+    for(const row of (data.subcategorias||[])){
+      const key=centralExpenseKey(month,row.subcategoria_id);
+      if(Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key)){ skipped++; continue; }
+      setCentralExpenseValue(month,row.subcategoria_id,Number(row.total)||0,'d1'); loaded++;
+    }
+    save();render();
+    toast(`D1: ${loaded} valores cargados · ${skipped} valores existentes conservados`);
+  }catch(err){ alert(`No se pudieron cargar los valores de D1 para ${monthLabel(month)}.\n\n${err.message||err}`); }
+}
 function normalizedText(v){return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase().replace(/\s+/g,' ');}
 function catalogComparison(){
   const c=centralCatalog();
@@ -140,6 +170,7 @@ async function syncCentralCatalog(){
     const data=await res.json().catch(()=>null);
     if(!res.ok || !data?.ok || !Array.isArray(data.categorias) || !Array.isArray(data.subcategorias)) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
     state.settings.catalogApiUrl=apiUrl;
+    state.settings.catalogChatId=String($('#catalogChatId')?.value||state.settings.catalogChatId||'').trim();
     state.centralCatalog={categorias:data.categorias,subcategorias:data.subcategorias};
     state.centralCatalogFetchedAt=new Date().toISOString();
     save();
@@ -235,7 +266,8 @@ function autoCarryJanuarySavings(){
   state.assetItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));
   toast(`Saldos de diciembre pasaron a ${monthLabel(currentMonth)}`);
 }
-function totals(month=currentMonth){const income=state.incomeItems.reduce((s,x)=>s+getMonthValue(x,month),0);const expenses=state.expenseItems.reduce((s,x)=>s+getMonthValue(x,month),0);return{income,expenses,extra:income-expenses};}
+function totals(month=currentMonth){const income=state.incomeItems.reduce((s,x)=>s+getMonthValue(x,month),0);const expenses=centralCatalogMode()?centralExpenseTotal(month):state.expenseItems.reduce((s,x)=>s+getMonthValue(x,month),0);return{income,expenses,extra:income-expenses};}
+function centralAnnualSubTotal(subId){ const year=Number(currentMonth.slice(0,4)); const selectedMonth=Number(currentMonth.slice(5,7)); return yearMonths(year).slice(0,selectedMonth).reduce((s,m)=>s+getCentralExpenseValue(m,subId),0); }
 function annualTotal(item){
   // Acumulado del año que se está visualizando, hasta el mes seleccionado.
   // No mezcla valores de otros años ni suma meses futuros.
@@ -243,7 +275,7 @@ function annualTotal(item){
   const selectedMonth=Number(currentMonth.slice(5,7));
   return yearMonths(year).slice(0,selectedMonth).reduce((s,m)=>s+getMonthValue(item,m),0);
 }
-function categoryTotals(month=currentMonth){const map={};state.expenseItems.forEach(x=>{const v=getMonthValue(x,month);if(v)map[x.category]=(map[x.category]||0)+v;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);}
+function categoryTotals(month=currentMonth){ return centralCatalogMode()?centralCategoryTotals(month):(()=>{const map={};state.expenseItems.forEach(x=>{const v=getMonthValue(x,month);if(v)map[x.category]=(map[x.category]||0)+v;});return Object.entries(map).sort((a,b)=>b[1]-a[1]);})(); }
 function assetTotals(month=currentMonth){let cop=0,usd=0;state.assetItems.forEach(x=>{const v=getMonthValue(x,month);if(x.currency==='USD')usd+=v;else cop+=v;});const rate=Number(state.settings.usdToCop||4000);return{cop,usd,totalCopEquivalent:cop+usd*rate};}
 function categories(){return [...new Set(state.expenseItems.map(x=>x.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));}
 function orderedExpenseCategories(){
@@ -376,17 +408,17 @@ function renderExpenses(){
   const wrap=$('#expenseRows');
   if(central){
     const groups=centralExpenseGroups();
-    wrap.innerHTML=`<div class="catalog-stage-note">☁️ <strong>Catálogo oficial de Cloudflare D1</strong><span>Estas son las categorías y subcategorías reales de Gastos IA. En esta etapa solo estamos conectando la estructura; los valores mensuales llegarán en la siguiente etapa.</span></div>` +
-      (groups.map(cat=>`<section class="expense-category-card central-catalog-card">
+    wrap.innerHTML=`<div class="catalog-stage-note"><div><strong>☁️ Catálogo oficial de Cloudflare D1</strong><span>Las categorías y subcategorías vienen de D1. Los valores son independientes y editables en esta aplicación.</span></div><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Cargar valores de D1</button></div>` +
+      (groups.map(cat=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
-          <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total central-pending">Pendiente etapa 2</div></div>
+          <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
         </div>
-        <div class="category-items">${cat.subcategorias.map(sub=>`<div class="expense-item central-expense-item">
-          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>Subcategoría D1 · ID: ${esc(sub.id)}</small></div></div>
-          <div class="central-value-placeholder">Los valores mensuales se cargarán desde D1 en la etapa 2</div>
-        </div>`).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
-      </section>`).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
-    $('#expensesViewTotal').textContent='Pendiente etapa 2';
+        <div class="category-items">${cat.subcategorias.map(sub=>{const val=getCentralExpenseValue(currentMonth,sub.id);const imported=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]==='d1';return `<div class="expense-item central-expense-item">
+          <div class="row-top"><div class="row-title"><strong>${esc(sub.nombre)}</strong><small>${imported?'☁️ Cargado desde D1':'✏️ Valor editable localmente'}</small></div></div>
+          <input class="value-input" inputmode="numeric" aria-label="${esc(sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)">
+        </div>`}).join('') || '<div class="empty">Esta categoría no tiene subcategorías activas.</div>'}</div>
+      </section>`;}).join('') || '<div class="empty">No hay categorías activas en D1.</div>');
+    $('#expensesViewTotal').textContent=money(centralExpenseTotal());
     return;
   }
   document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
@@ -426,6 +458,7 @@ function expenseItemHTML(x,index,total,category){
     <input class="value-input" inputmode="numeric" aria-label="${esc(x.subcategory)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateExpense('${x.id}', this.value)">
   </div>`;
 }
+function updateCentralExpense(subId,raw){setCentralExpenseValue(currentMonth,subId,numberValue(raw),'manual');save();render();toast('Valor mensual actualizado');}
 function updateExpense(id_,raw){const x=state.expenseItems.find(i=>i.id===id_);if(x){setMonthValue(x,currentMonth,numberValue(raw));save();render();toast('Gasto actualizado');}}
 function editCategory(category){if(centralCatalogMode()){toast('El catálogo de D1 es oficial; cambia las categorías desde Gastos IA.');return;}
   openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{
@@ -501,7 +534,15 @@ function openExpenseForm(title, initialCategory='', initialSubcategory='', onSub
 }
 
 function copyPreviousExpenses(){
-  const prev=shiftMonth(currentMonth,-1);if(!state.expenseItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay gastos registrados en ${monthLabel(prev)}`);return;}
+  const prev=shiftMonth(currentMonth,-1);
+  if(centralCatalogMode()){
+    const prevTotal=centralExpenseTotal(prev); if(!prevTotal){toast(`No hay valores de gastos en ${monthLabel(prev)}`);return;}
+    const overwrite=centralExpenseTotal(currentMonth)!==0; const message=overwrite?`Ya hay gastos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los gastos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
+    if(!confirm(message))return;
+    for(const row of centralExpenseRows(prev)) setCentralExpenseValue(currentMonth,row.subId,row.value,'manual');
+    save();render();toast(`Gastos copiados de ${monthLabel(prev)}`); return;
+  }
+  if(!state.expenseItems.some(x=>getMonthValue(x,prev)!==0)){toast(`No hay gastos registrados en ${monthLabel(prev)}`);return;}
   const overwrite=currentMonthHasExpenses();const message=overwrite?`Ya hay gastos en ${monthLabel(currentMonth)}. ¿Quieres reemplazar sus valores con los de ${monthLabel(prev)}?`:`¿Copiar los gastos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
   if(!confirm(message))return;state.expenseItems.forEach(x=>setMonthValue(x,currentMonth,getMonthValue(x,prev)));save();render();toast(`Gastos copiados de ${monthLabel(prev)}`);
 }
@@ -543,7 +584,7 @@ function renderAnalytics(){
   const currentIndex=Math.min(11,Math.max(0,Number(currentMonth.slice(5,7))-1));
   const current=Number(currentMonth.slice(0,4))===analyticsYear ? wealth[currentIndex] : wealth[11];
   const expSeries=annualExpenseCategories(analyticsYear);
-  const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0),0);
+  const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+(centralCatalogMode()?centralExpenseTotal(m):state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0)),0);
   $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);
   $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
   renderWealthLegend(wealth);
@@ -624,6 +665,11 @@ function assetTotalsFromCarry(month){
   const rate=Number(state.settings.usdToCop||4000);return{cop,usd,totalCopEquivalent:cop+usd*rate};
 }
 function annualExpenseCategories(year){
+  if(centralCatalogMode()){
+    const groups=centralExpenseGroups();
+    const series=groups.map(cat=>({category:cat.nombre,values:yearMonths(year).map(m=>cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(m,sub.id),0))}));
+    return series.filter(s=>s.values.some(v=>v!==0)).sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0));
+  }
   const cats=categories();
   const series=cats.map(category=>({category,values:yearMonths(year).map(m=>state.expenseItems.filter(x=>x.category===category).reduce((s,x)=>s+getMonthValue(x,m),0))}));
   const sorted=series.filter(s=>s.values.some(v=>v!==0)).sort((a,b)=>b.values.reduce((x,y)=>x+y,0)-a.values.reduce((x,y)=>x+y,0));
@@ -754,7 +800,9 @@ function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.
 function exportExcel(month=currentMonth){
   month=month||currentMonth; const label=monthLabel(month); const total=totals(month); const assets=assetTotals(month);
   const incomeRows=[['ID','Nombre','Valor'],...state.incomeItems.map(x=>[x.id,x.name,getMonthValue(x,month)])];
-  const expenseRows=[['ID','Categoria','Subcategoria','Valor'],...state.expenseItems.map(x=>[x.id,x.category,x.subcategory,getMonthValue(x,month)])];
+  const expenseRows=centralCatalogMode()
+    ? [['ID','Categoria','Subcategoria','Valor'],...centralExpenseRows(month).map(x=>[x.subId,x.category,x.subcategory,x.value])]
+    : [['ID','Categoria','Subcategoria','Valor'],...state.expenseItems.map(x=>[x.id,x.category,x.subcategory,getMonthValue(x,month)])];
   const assetRows=[['ID','Categoria','Cuenta / inversión','Moneda','Saldo'],...state.assetItems.map(x=>[x.id,x.category,x.name,x.currency,getMonthValue(x,month)])];
   const summaryRows=[['Concepto','Valor'],['Mes',label],['MesKey',month],['Ingresos',total.income],['Gastos',total.expenses],['Extra / deficit',total.extra],['Ahorros e inversiones COP',assets.cop],['Ahorros e inversiones USD',assets.usd],['Patrimonio equivalente COP',assets.totalCopEquivalent],['Tasa USD → COP',Number(state.settings.usdToCop||4000)]];
   const controlRows=[['CAMPO','VALOR'],['Mes exportado',label],['MesKey',month],['INSTRUCCIÓN','En Excel modifica solamente las columnas Valor o Saldo. No cambies ID, Categoria, Subcategoria, Nombre, Cuenta / inversión ni Moneda. Al importar, las categorías y nombres originales se conservarán.']];
@@ -802,17 +850,20 @@ async function importExcel(file){
     const incRows=named.Ingresos?sheetRows(named.Ingresos.text(),sharedVals):[], expRows=named.Gastos?sheetRows(named.Gastos.text(),sharedVals):[], astRows=named.Ahorros?sheetRows(named.Ahorros.text(),sharedVals):[];
     let changed=0, missing=0;
     const updateRows=(rows,items,valueCol)=>{for(const r of rows.slice(1)){const item=items.find(x=>x.id===String(r[0]??''));if(!item){missing++;continue;}const v=Number(r[valueCol]??0);if(Number.isFinite(v)){setMonthValue(item,month,v);changed++;}}};
-    updateRows(incRows,state.incomeItems,2); updateRows(expRows,state.expenseItems,3); updateRows(astRows,state.assetItems,4);
+    updateRows(incRows,state.incomeItems,2);
+    if(centralCatalogMode()){ for(const r of expRows.slice(1)){ const subId=String(r[0]??''); if(!subId)continue; const v=Number(r[3]??0); if(Number.isFinite(v)){setCentralExpenseValue(month,subId,v,'manual');changed++;} } } else updateRows(expRows,state.expenseItems,3);
+    updateRows(astRows,state.assetItems,4);
     currentMonth=month;analyticsYear=Number(month.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast(`Excel importado: ${changed} valores actualizados`); if(missing)toast(`${missing} filas del Excel no coincidieron con datos actuales`);
   }catch(err){console.error(err);alert(`No se pudo importar el Excel. ${err.message||''}`);}
 }
 
 function openSettings(){
   const apiUrl=state.settings.catalogApiUrl||'';
+  const chatId=state.settings.catalogChatId||'';
   $('#modal').innerHTML=`<h3>Datos y configuración</h3><div class="settings-list">
   <div class="settings-block"><strong>☁️ Catálogo central de categorías</strong><p class="helper">Etapa 1: la aplicación puede leer las categorías y subcategorías oficiales desde Cloudflare D1. Esta conexión es solamente de lectura y no modifica los gastos diarios.</p>
   <div class="form-field"><label>URL pública del Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
-  <button class="primary-btn" onclick="syncCentralCatalog()">🔄 Probar y sincronizar catálogo D1</button>
+  <button class="primary-btn" onclick="syncCentralCatalog()">🔄 Probar y sincronizar catálogo D1</button><div class="form-field" style="margin-top:10px"><label>Chat ID de Telegram (opcional)</label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Déjalo vacío si D1 solo tiene un chat"></div>
   ${renderCatalogSettings()}
   </div>
   <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes completo para revisarlo o modificar sus valores en Excel. Al volver a importarlo, la app conservará las categorías y nombres originales.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>

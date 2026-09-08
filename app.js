@@ -165,6 +165,21 @@ async function syncCentralExpenseValues(month=currentMonth){
   if(!centralCatalogMode()){toast('Primero conecta el catálogo D1.');return;}
   const apiUrl=String(state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl){toast('Falta la URL del Worker.');return;}
+
+  // Si el mes tiene valores editados manualmente, pedir confirmación antes
+  // de reemplazarlos por los valores actuales de D1.
+  const manualKeys=Object.keys(state.centralExpenseValues||{}).filter(key=>
+    key.startsWith(`${month}|`) && state.centralExpenseImported?.[key]==='manual'
+  );
+  const hasManualEdits=manualKeys.length>0;
+  if(hasManualEdits){
+    const ok=confirm(`Hay ${manualKeys.length} ${manualKeys.length===1?'dato editado':'datos editados'} manualmente en ${monthLabel(month)}.\n\n¿Quieres reemplazarlos por los valores actuales de D1?`);
+    if(!ok){
+      toast('Se conservaron los valores que habías editado.');
+      return;
+    }
+  }
+
   try{
     // PASO 1: actualizar primero el catálogo oficial. Así los IDs que usamos
     // para guardar los valores siempre corresponden al catálogo actual de D1.
@@ -187,15 +202,26 @@ async function syncCentralExpenseValues(month=currentMonth){
 
     const totalD1=Math.round(Number(data?.total)||0);
     let loaded=0, skipped=0, nonZero=0;
+
+    // Confirmada la recarga: el mes vuelve a quedar completamente basado en
+    // D1. Primero eliminamos los valores locales del mes; las subcategorías
+    // que D1 no devuelve quedan implícitamente en $0.
+    if(hasManualEdits){
+      Object.keys(state.centralExpenseValues||{}).forEach(key=>{
+        if(key.startsWith(`${month}|`)) delete state.centralExpenseValues[key];
+      });
+      Object.keys(state.centralExpenseImported||{}).forEach(key=>{
+        if(key.startsWith(`${month}|`)) delete state.centralExpenseImported[key];
+      });
+    }
+
     for(const row of (data.subcategorias||[])){
       const subId=String(row.subcategoria_id||'').trim();
       if(!subId) continue;
       const key=centralExpenseKey(month,subId);
       const exists=Object.prototype.hasOwnProperty.call(state.centralExpenseValues||{},key);
       const source=state.centralExpenseImported?.[key];
-      // Solo una edición explícitamente manual queda protegida. Los valores
-      // que vienen de versiones anteriores sin marca de origen, o que fueron
-      // cargados desde D1, se reemplazan por el valor actual de D1.
+      // Sin confirmación, las ediciones manuales se conservan.
       if(exists && source==='manual'){ skipped++; continue; }
       const value=parseD1Money(row.total);
       setCentralExpenseValue(month,subId,value,'d1');
@@ -473,7 +499,7 @@ function renderExpenses(){
   const wrap=$('#expenseRows');
   if(central){
     const groups=centralExpenseGroups();
-    wrap.innerHTML=`<div class="catalog-stage-note"><div><strong>☁️ Catálogo oficial de Cloudflare D1</strong><span>Las categorías y subcategorías vienen de D1. Los valores son independientes y editables en esta aplicación.</span></div><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar D1 y cargar valores</button></div>` +
+    wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
       (groups.map(cat=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
           <div class="category-heading-info"><div class="category-title">${esc(cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>

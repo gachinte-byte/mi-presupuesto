@@ -48,3 +48,5 @@ body.expense-organizing .organize-only,body.savings-organizing .organize-only{di
 
 
 .catalog-stage-note{margin:0 0 14px;padding:12px 14px;border:1px solid #d7e4ee;border-radius:14px;background:#f4f9fc;display:flex;flex-direction:column;gap:4px;color:#34506a}.catalog-stage-note span{font-size:.84rem;color:#647789}.central-pending{color:#6b7280;font-size:.82rem}.central-value-placeholder{padding:12px 14px;border:1px dashed #d9dce3;border-radius:12px;color:#7b8490;background:#fafafa;font-size:.82rem}.central-expense-item .row-title small{color:#7b8490}.central-catalog-card{border-color:#dce4ec}
+
+.central-expense-sync{margin:0 0 10px;display:flex;justify-content:flex-end}.central-expense-sync .secondary-btn{width:auto}

@@ -84,3 +84,11 @@ Ingresos:
 - Evita errores si aparece algún elemento indefinido en los datos locales.
 - La copia toma los valores del mes anterior desde D1 y los guarda en el mes actual mediante UPSERT.
 - No modifica Gastos ni Telegram.
+
+
+## Fase 3 — V49: gestión de cuentas e ingresos
+- Ahorros: crear, renombrar, cambiar categoría/moneda, cambiar visibilidad en Inicio y eliminar lógicamente cuentas desde `mi-presupuesto`; cambios persistidos en D1.
+- Ingresos: crear, renombrar, cambiar categoría y eliminar lógicamente ingresos; cambios persistidos en D1.
+- Los saldos/valores históricos NO se eliminan al desactivar una cuenta o ingreso.
+- Escrituras protegidas con `PRESUPUESTO_WRITE_KEY`.
+- Las categorías centrales existentes se mantienen; la gestión solicitada se aplica a cuentas/productos y subcategorías de ingreso.

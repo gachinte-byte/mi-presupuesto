@@ -61,6 +61,8 @@ function normalize(data) {
   data.settings ||= { usdToCop: 4000 };
   data.settings.catalogApiUrl ||= '';
   data.settings.presupuestoWriteKey ||= '';
+  data.phase3SavingsCatalog ||= null;
+  data.phase3IncomeCatalog ||= null;
   data.centralCatalog ||= null;
   data.centralCatalogFetchedAt ||= null;
   data.centralExpenseValues ||= {};
@@ -353,6 +355,19 @@ async function writePhase3Value(type,id_,month,value){
   return data;
 }
 
+async function writePhase3Resource(path, method, body=null){
+  const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
+  const key=String(state?.settings?.presupuestoWriteKey||'').trim();
+  if(!apiUrl) throw new Error('No hay URL del Worker configurada.');
+  if(!key) throw new Error('Falta configurar la clave de escritura D1 en Configuración.');
+  const opts={method,headers:{'Content-Type':'application/json','X-Presupuesto-Write-Key':key}};
+  if(body!==null) opts.body=JSON.stringify(body);
+  const res=await fetch(`${apiUrl}${path}`,opts);
+  let data=null; try{data=await res.json();}catch{}
+  if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+  return data;
+}
+
 async function syncPhase3ReadOnly(month=currentMonth){
   const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl) return;
@@ -366,6 +381,7 @@ async function syncPhase3ReadOnly(month=currentMonth){
     if(!aCatRes.ok||!aBalRes.ok||!iCatRes.ok||!iValRes.ok) throw new Error('No se pudieron leer todos los datos de Fase 3');
     const [aCat,aBal,iCat,iVal]=await Promise.all([aCatRes.json(),aBalRes.json(),iCatRes.json(),iValRes.json()]);
     if(aCat?.ok && Array.isArray(aCat.productos)){
+      state.phase3SavingsCatalog={categorias:Array.isArray(aCat.categorias)?aCat.categorias:[],productos:aCat.productos};
       const existingById=new Map(state.assetItems.map(x=>[String(x.id),x]));
       const merged=[];
       for(const product of aCat.productos){
@@ -387,6 +403,7 @@ async function syncPhase3ReadOnly(month=currentMonth){
       }
     }
     if(iCat?.ok && Array.isArray(iCat.subcategorias)){
+      state.phase3IncomeCatalog={categorias:Array.isArray(iCat.categorias)?iCat.categorias:[],subcategorias:iCat.subcategorias};
       const existingById=new Map(state.incomeItems.map(x=>[String(x.id),x]));
       const categoryById=new Map((iCat.categorias||[]).map(c=>[String(c.id),c.nombre]));
       state.incomeItems=iCat.subcategorias.map(sub=>{
@@ -444,7 +461,6 @@ function bindEvents() {
     if (action === 'move-asset-category-down') moveAssetCategory(btn.dataset.category,1);
     if (action === 'move-asset-subcategory-up') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
     if (action === 'move-asset-subcategory-down') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
-    if (action === 'edit-asset-category') editAssetCategory(btn.dataset.category);
     if (action === 'add-asset-to-category') openAddAsset(btn.dataset.category);
     if (action === 'edit-expense') editExpense(btn.dataset.id);
     if (action === 'delete-expense') deleteExpense(btn.dataset.id);
@@ -569,36 +585,23 @@ function orderedAssetSubcategories(category){const existing=state.assetItems.fil
 function moveAssetCategory(category,direction){const order=orderedAssetCategories(),i=order.indexOf(category),j=i+direction;if(i<0||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];state.assetCategoryOrder=order;save();renderAssets();}
 function moveAssetSubcategory(category,name,direction){const order=orderedAssetSubcategories(category),i=order.indexOf(name),j=i+direction;if(i<0||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];state.assetSubcategoryOrder[category]=order;save();renderAssets();}
 function toggleSavingsOrganize(){savingsOrganizeMode=!savingsOrganizeMode;renderAssets();toast(savingsOrganizeMode?'Modo organización activado':'Orden guardado');}
-function moveAssetItemToCategory(itemId,newCategory){
+async function moveAssetItemToCategory(itemId,newCategory){
   const x=state.assetItems.find(i=>i.id===itemId); if(!x)return false;
-  const oldCategory=x.category, oldName=x.name;
-  newCategory=String(newCategory||'').trim(); if(!newCategory||newCategory===oldCategory)return false;
-  if(state.assetItems.some(i=>i.id!==itemId&&i.category.toLowerCase()===newCategory.toLowerCase()&&i.name.toLowerCase()===oldName.toLowerCase())){
-    alert('Ya existe una cuenta/inversión con ese nombre dentro de la categoría seleccionada.'); return false;
-  }
-  x.category=newCategory;
-  state.assetCategoryOrder ||= [];
-  if(!state.assetCategoryOrder.includes(newCategory)) state.assetCategoryOrder.push(newCategory);
-  state.assetSubcategoryOrder ||= {};
-  state.assetSubcategoryOrder[oldCategory]=(state.assetSubcategoryOrder[oldCategory]||[]).filter(n=>n!==oldName);
-  state.assetSubcategoryOrder[newCategory] ||= [];
-  if(!state.assetSubcategoryOrder[newCategory].includes(oldName)) state.assetSubcategoryOrder[newCategory].push(oldName);
-  if(!state.assetItems.some(i=>i.category===oldCategory)){
-    state.assetCategoryOrder=state.assetCategoryOrder.filter(c=>c!==oldCategory);
-    delete state.assetSubcategoryOrder[oldCategory];
-  }
-  save(); renderAssets(); toast(`“${oldName}” movida a ${newCategory}`); return true;
+  const cats=state.phase3SavingsCatalog?.categorias||[]; const cat=cats.find(c=>c.nombre===String(newCategory||'').trim());
+  if(!cat||cat.nombre===x.category){alert('Selecciona una categoría válida.');return false;}
+  if(state.assetItems.some(i=>i.id!==itemId&&String(i.category).toLowerCase()===cat.nombre.toLowerCase()&&String(i.name).toLowerCase()===String(x.name).toLowerCase())){alert('Ya existe una cuenta/inversión con ese nombre dentro de la categoría seleccionada.');return false;}
+  const oldCategory=x.category;
+  try{
+    await writePhase3Resource(`/presupuesto/ahorros/productos/${encodeURIComponent(x.id)}`,'PATCH',{categoria_id:cat.id});
+    x.category=cat.nombre;state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(cat.nombre))state.assetCategoryOrder.push(cat.nombre);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[oldCategory]=(state.assetSubcategoryOrder[oldCategory]||[]).filter(n=>n!==x.name);state.assetSubcategoryOrder[cat.nombre] ||= [];if(!state.assetSubcategoryOrder[cat.nombre].includes(x.name))state.assetSubcategoryOrder[cat.nombre].push(x.name);save();renderAssets();toast(`“${x.name}” movida a ${cat.nombre} y guardada en D1`);return true;
+  }catch(err){alert(`No se pudo mover la cuenta en D1.\n\n${err.message||err}`);return false;}
 }
 function openMoveAsset(itemId){
   const x=state.assetItems.find(i=>i.id===itemId); if(!x)return;
-  const cats=orderedAssetCategories().filter(c=>c!==x.category);
-  const options=cats.map(c=>`<option value="${escAttr(c)}">${esc(c)}</option>`).join('');
-  $('#modal').innerHTML=`<h3>Mover cuenta / inversión</h3><form id="moveAssetForm"><p class="helper" style="margin-top:-4px;margin-bottom:14px"><strong>${esc(x.name)}</strong> está actualmente en <strong>${esc(x.category)}</strong>.</p><div class="form-field"><label>Mover a</label><select class="select" id="moveAssetCategory"><option value="">Selecciona una categoría...</option>${options}<option value="__new__">＋ Crear nueva categoría</option></select></div><div class="form-field hidden" id="moveAssetNewCategoryField"><label>Nueva categoría</label><input class="input" id="moveAssetNewCategory" placeholder="Ej. INVERSIONES" autocomplete="off"></div><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Mover</button></div></form>`;
-  $('#modalBackdrop').classList.remove('hidden');
-  const sel=$('#moveAssetCategory');
-  sel.onchange=()=>{$('#moveAssetNewCategoryField').classList.toggle('hidden',sel.value!=='__new__');if(sel.value==='__new__')setTimeout(()=>$('#moveAssetNewCategory').focus(),30);};
-  $('#moveAssetForm').onsubmit=e=>{e.preventDefault();let dest=sel.value;if(dest==='__new__')dest=$('#moveAssetNewCategory').value.trim();if(!dest){alert('Selecciona o crea una categoría.');return;}if(moveAssetItemToCategory(itemId,dest))closeModal();};
-  setTimeout(()=>sel.focus(),50);
+  const cats=(state.phase3SavingsCatalog?.categorias||[]).filter(c=>c.nombre!==x.category);
+  const options=cats.map(c=>`<option value="${escAttr(c.nombre)}">${esc(c.nombre)}</option>`).join('');
+  $('#modal').innerHTML=`<h3>Mover cuenta / inversión</h3><form id="moveAssetForm"><p class="helper" style="margin-top:-4px;margin-bottom:14px"><strong>${esc(x.name)}</strong> está actualmente en <strong>${esc(x.category)}</strong>.</p><div class="form-field"><label>Mover a</label><select class="select" id="moveAssetCategory"><option value="">Selecciona una categoría...</option>${options}</select></div><div class="form-actions"><button type="button" class="secondary-btn" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="submit">Mover</button></div></form>`;
+  $('#modalBackdrop').classList.remove('hidden'); const sel=$('#moveAssetCategory'); $('#moveAssetForm').onsubmit=async e=>{e.preventDefault();if(!sel.value){alert('Selecciona una categoría.');return;}const ok=await moveAssetItemToCategory(itemId,sel.value);if(ok)closeModal();}; setTimeout(()=>sel.focus(),50);
 }
 
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
@@ -634,9 +637,43 @@ async function updateIncome(id_,raw){
     alert(`No se pudo guardar el ingreso en D1.\n\n${err.message||err}`);
   }
 }
-function editIncome(id_){const x=state.incomeItems.find(i=>i.id===id_);if(!x)return;openForm('Editar ingreso',[{name:'Nombre',key:'name',type:'text',value:x.name}],val=>{x.name=val.name.trim()||x.name;save();render();toast('Ingreso actualizado');});}
-function deleteIncome(id_){if(!confirm('¿Eliminar este ingreso y sus valores?'))return;state.incomeItems=state.incomeItems.filter(x=>x.id!==id_);save();render();}
-function openAddIncome(){openForm('Nuevo ingreso',[{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Salario AEI'}],val=>{state.incomeItems.push({id:id('inc'),name:val.name.trim()||'Nuevo ingreso',monthly:{}});save();render();toast('Ingreso creado');});}
+async function editIncome(id_){
+  const x=state.incomeItems.find(i=>i.id===id_); if(!x)return;
+  const cats=state.phase3IncomeCatalog?.categorias||[];
+  const currentCat=x.category||cats.find(c=>String(c.id)===String(x.categoryId))?.nombre||'';
+  openForm('Editar ingreso',[{name:'Categoría',key:'category',type:'select',value:currentCat,options:cats.map(c=>c.nombre)},{name:'Nombre',key:'name',type:'text',value:x.name}],async val=>{
+    const name=String(val.name||'').trim(); if(!name){alert('El nombre es obligatorio.');return;}
+    const cat=cats.find(c=>c.nombre===val.category); if(!cat){alert('Selecciona una categoría válida.');return;}
+    const duplicate=state.incomeItems.some(i=>i.id!==id_&&String(i.categoryId)===String(cat.id)&&String(i.name).trim().toLowerCase()===name.toLowerCase());
+    if(duplicate){alert('Ya existe ese ingreso dentro de la categoría seleccionada.');return;}
+    const old={name:x.name,category:x.category,categoryId:x.categoryId};
+    try{
+      const data=await writePhase3Resource(`/presupuesto/ingresos/subcategorias/${encodeURIComponent(x.id)}`,'PATCH',{nombre:name,categoria_id:cat.id});
+      const saved=data.saved;
+      x.name=saved.nombre; x.categoryId=saved.categoria_id; x.category=cat.nombre;
+      save();render();toast('Ingreso actualizado en D1');
+    }catch(err){ x.name=old.name;x.category=old.category;x.categoryId=old.categoryId;save();render();alert(`No se pudo actualizar el ingreso en D1.\n\n${err.message||err}`); }
+  });
+}
+async function deleteIncome(id_){
+  const x=state.incomeItems.find(i=>i.id===id_); if(!x)return;
+  if(!confirm(`¿Eliminar “${x.name}”? Sus valores históricos se conservarán en D1, pero el ingreso dejará de aparecer.`))return;
+  try{ await writePhase3Resource(`/presupuesto/ingresos/subcategorias/${encodeURIComponent(x.id)}`,'DELETE'); state.incomeItems=state.incomeItems.filter(i=>i.id!==id_); save(); render(); toast('Ingreso eliminado de D1'); }
+  catch(err){ alert(`No se pudo eliminar el ingreso de D1.\n\n${err.message||err}`); }
+}
+async function openAddIncome(){
+  const cats=state.phase3IncomeCatalog?.categorias||[];
+  if(!cats.length){alert('No se han cargado las categorías de ingresos desde D1.');return;}
+  openForm('Nuevo ingreso',[{name:'Categoría',key:'category',type:'select',value:cats[0].nombre,options:cats.map(c=>c.nombre)},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Bonos, Freelance, Otro ingreso'}],async val=>{
+    const name=String(val.name||'').trim(); const cat=cats.find(c=>c.nombre===val.category);
+    if(!name||!cat){alert('Completa el nombre y la categoría.');return;}
+    if(state.incomeItems.some(i=>String(i.categoryId)===String(cat.id)&&String(i.name).trim().toLowerCase()===name.toLowerCase())){alert('Ya existe ese ingreso dentro de la categoría seleccionada.');return;}
+    try{
+      const data=await writePhase3Resource('/presupuesto/ingresos/subcategorias','POST',{categoria_id:cat.id,nombre:name});
+      const saved=data.saved; state.incomeItems.push({id:saved.id,name:saved.nombre,categoryId:saved.categoria_id,category:cat.nombre,subcategoryId:saved.id,monthly:{}}); save(); render(); toast('Ingreso creado en D1');
+    }catch(err){alert(`No se pudo crear el ingreso en D1.\n\n${err.message||err}`);}
+  });
+}
 
 function renderExpenses(){
   const central=centralCatalogMode();
@@ -863,12 +900,18 @@ function renderAssets(){
   wrap.innerHTML=cats.map((cat,catIndex)=>{
     const items=orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean);
     const canUp=catIndex>0,canDown=catIndex<cats.length-1;
-    return `<section class="asset-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div></div><div class="category-header-actions"><button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-asset-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-asset-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon category-edit-btn" title="Editar categoría" aria-label="Editar categoría" data-action="edit-asset-category" data-category="${escAttr(cat)}">✏️</button><button class="small-icon add-sub-btn" title="Agregar cuenta a ${escAttr(cat)}" aria-label="Agregar cuenta" data-action="add-asset-to-category" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map((x,index)=>assetItemHTML(x,index,items.length,cat)).join('')}</div></section>`;
+    return `<section class="asset-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div></div><div class="category-header-actions"><button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-asset-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-asset-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon add-sub-btn" title="Agregar cuenta a ${escAttr(cat)}" aria-label="Agregar cuenta" data-action="add-asset-to-category" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map((x,index)=>assetItemHTML(x,index,items.length,cat)).join('')}</div></section>`;
   }).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
   const a=assetTotals();$('#copTotal').textContent=money(a.cop);$('#usdTotal').textContent=money(a.usd,'USD');
 }
 function assetItemHTML(x,index,total,category){const val=getMonthValue(x,currentMonth),prev=shiftMonth(currentMonth,-1),pv=getMonthValue(x,prev);const canUp=index>0,canDown=index<total-1;const eye=x.homeVisible===true?'👁️':'○';const eyeLabel=x.homeVisible===true?'Ocultar de Inicio':'Mostrar en Inicio';return `<div class="expense-item asset-item"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>${x.currency} · Saldo anterior: ${x.currency==='USD'?money(pv,'USD'):money(pv)}</small></div><div class="row-actions"><button class="home-watch-btn organize-only ${x.homeVisible===true?'is-on':''}" title="${eyeLabel}" aria-label="${eyeLabel}" data-action="toggle-asset-home" data-id="${escAttr(x.id)}">${eye}</button><button class="order-text-btn organize-only" title="Mover cuenta arriba" aria-label="Mover cuenta arriba" data-action="move-asset-subcategory-up" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover cuenta abajo" aria-label="Mover cuenta abajo" data-action="move-asset-subcategory-down" data-category="${escAttr(category)}" data-subcategory="${escAttr(x.name)}" ${canDown?'':'disabled'}>↓</button><button class="order-text-btn organize-only" title="Mover a otra categoría" aria-label="Mover a otra categoría" data-action="move-asset-subcategory-category" data-id="${escAttr(x.id)}">↗</button><button class="small-icon" title="Editar" onclick="editAsset('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteAsset('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="decimal" aria-label="Saldo ${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="${x.currency==='USD'?'US$ 0':'$ 0'}" onchange="updateAsset('${x.id}', this.value)"></div>`;}
-function toggleAssetHome(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;x.homeVisible=x.homeVisible!==true;save();render();toast(x.homeVisible?'Cuenta agregada a Inicio':'Cuenta retirada de Inicio');}
+async function toggleAssetHome(id_){
+  const x=state.assetItems.find(i=>i.id===id_);if(!x)return;
+  const previous=x.homeVisible===true; const next=!previous;
+  x.homeVisible=next; save(); render();
+  try{await writePhase3Resource(`/presupuesto/ahorros/productos/${encodeURIComponent(x.id)}`,'PATCH',{home_visible:next?1:0});toast(next?'Cuenta agregada a Inicio':'Cuenta retirada de Inicio');}
+  catch(err){x.homeVisible=previous;save();render();alert(`No se pudo actualizar la cuenta en D1.\n\n${err.message||err}`);}
+}
 async function updateAsset(id_,raw){
   const x=state.assetItems.find(i=>i.id===id_);
   if(!x)return;
@@ -887,10 +930,44 @@ async function updateAsset(id_,raw){
     alert(`No se pudo guardar el saldo en D1.\n\n${err.message||err}`);
   }
 }
-function editAsset(id_){const x=state.assetItems.find(i=>i.id===id_);if(!x)return;openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:x.category},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],val=>{const oldCategory=x.category,oldName=x.name;x.category=val.category.trim()||x.category;x.name=val.name.trim()||x.name;x.currency=val.currency;state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(x.category))state.assetCategoryOrder.push(x.category);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[oldCategory] ||= [];state.assetSubcategoryOrder[oldCategory]=state.assetSubcategoryOrder[oldCategory].filter(n=>n!==oldName);state.assetSubcategoryOrder[x.category] ||= [];if(!state.assetSubcategoryOrder[x.category].includes(x.name))state.assetSubcategoryOrder[x.category].push(x.name);save();render();toast('Cuenta actualizada');});}
+async function editAsset(id_){
+  const x=state.assetItems.find(i=>i.id===id_);if(!x)return;
+  const cats=state.phase3SavingsCatalog?.categorias||[];
+  const currentCat=x.category;
+  openForm('Editar cuenta / inversión',[{name:'Categoría',key:'category',type:'select',value:currentCat,options:cats.map(c=>c.nombre)},{name:'Nombre',key:'name',type:'text',value:x.name},{name:'Moneda',key:'currency',type:'select',value:x.currency,options:['COP','USD']}],async val=>{
+    const cat=cats.find(c=>c.nombre===val.category); const name=String(val.name||'').trim();
+    if(!cat||!name){alert('Completa los datos de la cuenta.');return;}
+    if(state.assetItems.some(i=>i.id!==id_&&String(i.category).toLowerCase()===String(cat.nombre).toLowerCase()&&String(i.name).trim().toLowerCase()===name.toLowerCase())){alert('Ya existe esa cuenta dentro de la categoría seleccionada.');return;}
+    const old={category:x.category,name:x.name,currency:x.currency};
+    try{
+      const data=await writePhase3Resource(`/presupuesto/ahorros/productos/${encodeURIComponent(x.id)}`,'PATCH',{categoria_id:cat.id,nombre:name,moneda:val.currency});
+      const saved=data.saved; x.category=cat.nombre;x.name=saved.nombre;x.currency=saved.moneda;
+      state.assetCategoryOrder ||= []; if(!state.assetCategoryOrder.includes(x.category))state.assetCategoryOrder.push(x.category);
+      state.assetSubcategoryOrder ||= {}; state.assetSubcategoryOrder[old.category]=(state.assetSubcategoryOrder[old.category]||[]).filter(n=>n!==old.name); state.assetSubcategoryOrder[x.category] ||= []; if(!state.assetSubcategoryOrder[x.category].includes(x.name))state.assetSubcategoryOrder[x.category].push(x.name);
+      save();render();toast('Cuenta actualizada en D1');
+    }catch(err){x.category=old.category;x.name=old.name;x.currency=old.currency;save();render();alert(`No se pudo actualizar la cuenta en D1.\n\n${err.message||err}`);}
+  });
+}
 function editAssetCategory(category){openForm('Editar categoría',[{name:'Nombre de la categoría',key:'name',type:'text',value:category}],val=>{const newName=val.name.trim();if(!newName||newName===category)return;if(orderedAssetCategories().some(c=>c.toLowerCase()===newName.toLowerCase()&&c!==category)){alert('Ya existe una categoría con ese nombre.');return;}state.assetItems.forEach(x=>{if(x.category===category)x.category=newName;});state.assetCategoryOrder=(state.assetCategoryOrder||[]).map(c=>c===category?newName:c);state.assetSubcategoryOrder ||= {};if(state.assetSubcategoryOrder[category]){state.assetSubcategoryOrder[newName]=state.assetSubcategoryOrder[category];delete state.assetSubcategoryOrder[category];}save();render();toast('Categoría renombrada');});}
-function deleteAsset(id_){if(!confirm('¿Eliminar esta cuenta/inversión y sus saldos?'))return;const x=state.assetItems.find(i=>i.id===id_);state.assetItems=state.assetItems.filter(i=>i.id!==id_);if(x){state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[x.category]=(state.assetSubcategoryOrder[x.category]||[]).filter(n=>n!==x.name);}save();render();}
-function openAddAsset(category=''){openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'text',value:category,placeholder:'Ej. FIDUCUENTA'},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],val=>{const cat=val.category.trim()||'OTROS',name=val.name.trim()||'Nueva cuenta';state.assetItems.push({id:id('ast'),category:cat,name,currency:val.currency,monthly:{}});state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(cat))state.assetCategoryOrder.push(cat);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[cat] ||= [];if(!state.assetSubcategoryOrder[cat].includes(name))state.assetSubcategoryOrder[cat].push(name);save();render();toast('Cuenta creada');});}
+async function deleteAsset(id_){
+  const x=state.assetItems.find(i=>i.id===id_);if(!x)return;
+  if(!confirm(`¿Eliminar “${x.name}”? Sus saldos históricos se conservarán en D1, pero la cuenta dejará de aparecer.`))return;
+  try{await writePhase3Resource(`/presupuesto/ahorros/productos/${encodeURIComponent(x.id)}`,'DELETE');state.assetItems=state.assetItems.filter(i=>i.id!==id_);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[x.category]=(state.assetSubcategoryOrder[x.category]||[]).filter(n=>n!==x.name);save();render();toast('Cuenta eliminada de D1');}
+  catch(err){alert(`No se pudo eliminar la cuenta de D1.\n\n${err.message||err}`);}
+}
+async function openAddAsset(category=''){
+  const cats=state.phase3SavingsCatalog?.categorias||[]; if(!cats.length){alert('No se han cargado las categorías de Ahorros desde D1.');return;}
+  const selected=cats.find(c=>c.nombre===category)||cats[0];
+  openForm('Nueva cuenta / inversión',[{name:'Categoría',key:'category',type:'select',value:selected.nombre,options:cats.map(c=>c.nombre)},{name:'Nombre',key:'name',type:'text',placeholder:'Ej. Fiducia Banco X'},{name:'Moneda',key:'currency',type:'select',value:'COP',options:['COP','USD']}],async val=>{
+    const cat=cats.find(c=>c.nombre===val.category); const name=String(val.name||'').trim(); if(!cat||!name){alert('Completa los datos de la cuenta.');return;}
+    if(state.assetItems.some(i=>String(i.category).toLowerCase()===String(cat.nombre).toLowerCase()&&String(i.name).trim().toLowerCase()===name.toLowerCase())){alert('Ya existe esa cuenta dentro de la categoría seleccionada.');return;}
+    try{
+      const data=await writePhase3Resource('/presupuesto/ahorros/productos','POST',{categoria_id:cat.id,nombre:name,moneda:val.currency});
+      const saved=data.saved; state.assetItems.push({id:saved.id,category:cat.nombre,name:saved.nombre,currency:saved.moneda,homeVisible:Boolean(saved.home_visible),monthly:{}});
+      state.assetCategoryOrder ||= [];if(!state.assetCategoryOrder.includes(cat.nombre))state.assetCategoryOrder.push(cat.nombre);state.assetSubcategoryOrder ||= {};state.assetSubcategoryOrder[cat.nombre] ||= [];state.assetSubcategoryOrder[cat.nombre].push(saved.nombre);save();render();toast('Cuenta creada en D1');
+    }catch(err){alert(`No se pudo crear la cuenta en D1.\n\n${err.message||err}`);}
+  });
+}
 
 /* ---------- ANALÍTICA ANUAL ---------- */
 function renderAnalytics(){

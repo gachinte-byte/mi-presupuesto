@@ -44,7 +44,7 @@ La aplicación **no contiene la clave dentro del código**. El usuario debe intr
 
 Los endpoints de escritura del Worker requieren el secret `PRESUPUESTO_WRITE_KEY`. Además validan identificación del producto/subcategoría, formato de mes y valores numéricos. Las escrituras usan `UPSERT` sobre las claves únicas mensuales, evitando duplicados.
 
-### Alcance de V47
+### Alcance de V48
 
 Esta versión sincroniza y guarda **valores mensuales**. La estructura del catálogo (crear/eliminar/renombrar categorías, productos o subcategorías) sigue siendo una etapa posterior porque D1 es la fuente oficial y esos cambios requieren endpoints CRUD específicos.
 
@@ -64,8 +64,8 @@ Ingresos:
 
 - No se modifica la lógica existente de Gastos/Telegram.
 - No se toca `calculadora-inversiones`.
-- V47 mantiene la interfaz base de V43/V44/V45/V46.
-- V47 corrige la copia de mes anterior para Ahorros e Ingresos: obtiene explícitamente los valores del mes anterior desde D1 antes de copiarlos y guardarlos en el mes actual.
+- V48 mantiene la interfaz base de V43/V44/V45/V46.
+- V48 corrige la copia de mes anterior para Ahorros e Ingresos: obtiene explícitamente los valores del mes anterior desde D1 antes de copiarlos y guardarlos en el mes actual.
 - Antes de esta versión se validaron lectura y escritura controlada de Ahorros e Ingresos en D1.
 
 ### Versiones relevantes
@@ -76,4 +76,11 @@ Ingresos:
 - V44: lectura de Ahorros e Ingresos desde D1.
 - V45: lectura + escritura de valores mensuales de Ahorros e Ingresos.
 - V46: corrección de variable `mes` en escrituras.
-- V47: copia de mes anterior consulta D1 directamente y luego hace UPSERT de todos los valores al mes actual.
+- V48: copia de mes anterior consulta D1 directamente y luego hace UPSERT de todos los valores al mes actual.
+
+
+### V48
+- Corrige de forma defensiva la copia de mes anterior para Ahorros e Ingresos.
+- Evita errores si aparece algún elemento indefinido en los datos locales.
+- La copia toma los valores del mes anterior desde D1 y los guarda en el mes actual mediante UPSERT.
+- No modifica Gastos ni Telegram.

@@ -48,7 +48,7 @@ function formatNumber(value) { const n=numberValue(value); return n===0 ? '0' : 
 function focusNumberInput(el){ if(!el)return; const raw=numberValue(el.value); el.value=raw===0?'':String(raw); }
 function blurNumberInput(el){ if(!el)return; el.value=formatNumber(el.value); }
 function ensureMonthly(item) { if (!item.monthly) item.monthly = {}; }
-function getMonthValue(item, month) { ensureMonthly(item); return Number(item.monthly[month] || 0); }
+function getMonthValue(item, month) { if(!item) return 0; ensureMonthly(item); return Number(item.monthly[month] || 0); }
 function hasOwnMonthValue(item, month) { return Object.prototype.hasOwnProperty.call(item.monthly || {}, month); }
 function setMonthValue(item, month, value) { ensureMonthly(item); item.monthly[month] = Number(value) || 0; }
 function save() { state.currentMonth = currentMonth; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -812,17 +812,20 @@ async function copyPreviousMonth(){
   const prev=shiftMonth(currentMonth,-1);
   try{
     const rows=await fetchPhase3PreviousValues('income',prev);
-    const byId=new Map(rows.map(r=>[String(r.subcategoria_id),Number(r.valor)||0]));
-    if(!rows.some(r=>(Number(r.valor)||0)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
+    const byId=new Map(rows.filter(r=>r && r.subcategoria_id!=null).map(r=>[String(r.subcategoria_id),Number(r.valor)||0]));
+    if(!rows.some(r=>(Number(r?.valor)||0)!==0)){toast(`No hay ingresos registrados en ${monthLabel(prev)}`);return;}
     if(!confirm(`¿Copiar los ingresos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`))return;
-    const previousValues=state.incomeItems.map(x=>({x,value:byId.get(String(x.subcategoryId||x.id))??getMonthValue(x,prev)}));
-    state.incomeItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+
+    const items=state.incomeItems.filter(Boolean);
+    const snapshot=items.map(x=>({id:String(x.id),value:getMonthValue(x,currentMonth)}));
+    const values=items.map(x=>({x,id:String(x.subcategoryId||x.id),value:byId.has(String(x.subcategoryId||x.id))?byId.get(String(x.subcategoryId||x.id)):getMonthValue(x,prev)}));
+    values.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
     save();render();toast('Guardando ingresos en D1…');
-    for(const {x,value} of previousValues) await writePhase3Value('income', x.subcategoryId || x.id, currentMonth, value);
-    toast(`Ingresos copiados y guardados en D1`);
+    for(const row of values) await writePhase3Value('income',row.id,currentMonth,row.value);
+    toast('Ingresos copiados y guardados en D1');
   }catch(err){
     alert(`No se pudieron copiar los ingresos desde ${monthLabel(prev)}.\n\n${err.message||err}`);
-    await syncPhase3ReadOnly(currentMonth);
+    try{ await syncPhase3ReadOnly(currentMonth); }catch{}
     render();
   }
 }
@@ -830,18 +833,25 @@ async function copyPreviousSavings(){
   const prev=shiftMonth(currentMonth,-1);
   try{
     const rows=await fetchPhase3PreviousValues('savings',prev);
-    const byId=new Map(rows.map(r=>[String(r.producto_id),Number(r.saldo)||0]));
-    if(!rows.some(r=>(Number(r.saldo)||0)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
-    const overwrite=state.assetItems.some(x=>getMonthValue(x,currentMonth)!==0);const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
+    const validRows=rows.filter(r=>r && r.producto_id!=null);
+    const byId=new Map(validRows.map(r=>[String(r.producto_id),Number(r.saldo)||0]));
+    if(!validRows.some(r=>(Number(r.saldo)||0)!==0)){toast(`No hay saldos registrados en ${monthLabel(prev)}`);return;}
+    const items=state.assetItems.filter(Boolean);
+    const overwrite=items.some(x=>getMonthValue(x,currentMonth)!==0);
+    const message=overwrite?`Ya hay saldos en ${monthLabel(currentMonth)}. ¿Quieres reemplazarlos por los de ${monthLabel(prev)}?`:`¿Copiar los saldos de ${monthLabel(prev)} a ${monthLabel(currentMonth)}?`;
     if(!confirm(message))return;
-    const previousValues=state.assetItems.map(x=>({x,value:byId.get(String(x.id))??getMonthValue(x,prev)}));
-    state.assetItems.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
+
+    // Tomamos una foto del mes actual para poder restaurarlo si alguna escritura falla.
+    const snapshot=items.map(x=>({id:String(x.id),value:getMonthValue(x,currentMonth)}));
+    const values=items.map(x=>({x,id:String(x.id),value:byId.has(String(x.id))?byId.get(String(x.id)):getMonthValue(x,prev)}));
+
+    values.forEach(({x,value})=>setMonthValue(x,currentMonth,value));
     save();render();toast('Guardando saldos en D1…');
-    for(const {x,value} of previousValues) await writePhase3Value('savings', x.id, currentMonth, value);
-    toast(`Saldos copiados y guardados en D1`);
+    for(const row of values) await writePhase3Value('savings',row.id,currentMonth,row.value);
+    toast('Saldos copiados y guardados en D1');
   }catch(err){
     alert(`No se pudieron copiar los saldos desde ${monthLabel(prev)}.\n\n${err.message||err}`);
-    await syncPhase3ReadOnly(currentMonth);
+    try{ await syncPhase3ReadOnly(currentMonth); }catch{}
     render();
   }
 }

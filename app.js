@@ -12,6 +12,7 @@ let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
 let expenseOrganizeMode = false;
 let savingsOrganizeMode = false;
+let incomeOrganizeMode = false;
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -72,6 +73,7 @@ function normalize(data) {
   data.centralCategoryNames ||= {};
   data.centralSubcategoryNames ||= {};
   data.settings.catalogChatId ||= '';
+  data.incomeOrganizeMode = data.incomeOrganizeMode === true;
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -80,6 +82,9 @@ function normalize(data) {
   data.expenseSubcategoryOrder ||= {};
   data.assetCategoryOrder ||= [];
   data.assetSubcategoryOrder ||= {};
+  data.savingsCategoryNames ||= {};
+  data.incomeCategoryNames ||= {};
+  data.incomeItemOrder ||= [];
   const existingCategories = [...new Set(data.expenseItems.map(x => x.category).filter(Boolean))];
   const validCategoryOrder = data.expenseCategoryOrder.filter(c => existingCategories.includes(c));
   existingCategories.forEach(c => { if (!validCategoryOrder.includes(c)) validCategoryOrder.push(c); });
@@ -91,6 +96,9 @@ function normalize(data) {
     existingSubs.forEach(sub => { if (!validSubs.includes(sub)) validSubs.push(sub); });
     data.expenseSubcategoryOrder[cat] = validSubs;
   }
+  const incomeIds = data.incomeItems.map(x=>String(x.id));
+  data.incomeItemOrder = (data.incomeItemOrder||[]).map(String).filter(id=>incomeIds.includes(id));
+  incomeIds.forEach(id=>{ if(!data.incomeItemOrder.includes(id)) data.incomeItemOrder.push(id); });
   for (const x of [...data.incomeItems,...data.expenseItems,...data.assetItems]) {
     ensureMonthly(x);
     if (x.category === '[object PointerEvent]' || x.category === '[object Event]') x.category = 'Otros';
@@ -428,6 +436,7 @@ async function boot() {
   if (saved) { try { state=normalize(JSON.parse(saved)); currentMonth=state.currentMonth||currentMonth; } catch { state=null; } }
   if (!state) { const res=await fetch(DATA_URL); state=normalize(await res.json()); currentMonth=state.currentMonth||currentMonth; }
   analyticsYear = Number(currentMonth.slice(0,4));
+  incomeOrganizeMode = state.incomeOrganizeMode === true;
   autoCarryJanuarySavings();
   save();
   bindEvents();
@@ -462,6 +471,10 @@ function bindEvents() {
     if (action === 'move-asset-subcategory-up') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,-1);
     if (action === 'move-asset-subcategory-down') moveAssetSubcategory(btn.dataset.category,btn.dataset.subcategory,1);
     if (action === 'add-asset-to-category') openAddAsset(btn.dataset.category);
+    if (action === 'edit-savings-category') editSavingsCategoryName(btn.dataset.category);
+    if (action === 'move-income-up') moveIncomeItem(btn.dataset.id,-1);
+    if (action === 'move-income-down') moveIncomeItem(btn.dataset.id,1);
+    if (action === 'edit-income-category') editIncomeCategoryName(btn.dataset.categoryId);
     if (action === 'edit-expense') editExpense(btn.dataset.id);
     if (action === 'delete-expense') deleteExpense(btn.dataset.id);
   });
@@ -488,6 +501,7 @@ function bindEvents() {
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
   $('#toggleSavingsOrganize').onclick=toggleSavingsOrganize;
+  $('#toggleIncomeOrganize').onclick=toggleIncomeOrganize;
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
   document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
@@ -580,6 +594,59 @@ function openMoveExpense(itemId){
   $('#moveExpenseForm').onsubmit=e=>{e.preventDefault();let dest=sel.value;if(dest==='__new__')dest=$('#moveExpenseNewCategory').value.trim();if(!dest){alert('Selecciona o crea una categoría.');return;}if(moveExpenseItemToCategory(itemId,dest))closeModal();};
   setTimeout(()=>sel.focus(),50);
 }
+function savingsCategoryByName(category){
+  return (state.phase3SavingsCatalog?.categorias||[]).find(c=>String(c.nombre)===String(category));
+}
+function savingsCategoryDisplayName(category){
+  const c=savingsCategoryByName(category);
+  return String(state.savingsCategoryNames?.[String(c?.id)] || category || '');
+}
+function incomeCategoryById(id_){
+  return (state.phase3IncomeCatalog?.categorias||[]).find(c=>String(c.id)===String(id_));
+}
+function incomeCategoryDisplayName(id_,fallback=''){
+  const c=incomeCategoryById(id_);
+  return String(state.incomeCategoryNames?.[String(c?.id)] || c?.nombre || fallback || '');
+}
+function orderedIncomeItems(){
+  const ids=state.incomeItems.map(x=>String(x.id));
+  const order=(state.incomeItemOrder||[]).map(String).filter(id=>ids.includes(id));
+  ids.forEach(id=>{if(!order.includes(id))order.push(id);});
+  state.incomeItemOrder=order;
+  return order.map(id=>state.incomeItems.find(x=>String(x.id)===id)).filter(Boolean);
+}
+function moveIncomeItem(id_,direction){
+  const order=orderedIncomeItems().map(x=>String(x.id));
+  const i=order.indexOf(String(id_)),j=i+direction;
+  if(i<0||j<0||j>=order.length)return;
+  [order[i],order[j]]=[order[j],order[i]];
+  state.incomeItemOrder=order;save();renderIncome();
+}
+function editSavingsCategoryName(category){
+  const c=savingsCategoryByName(category); if(!c)return;
+  const current=savingsCategoryDisplayName(category);
+  openForm('Nombre local de la categoría',[{name:'Nombre',key:'name',type:'text',value:current}],val=>{
+    const name=String(val.name||'').trim(); if(!name)return;
+    const duplicate=(state.phase3SavingsCatalog?.categorias||[]).some(x=>String(x.id)!==String(c.id) && savingsCategoryDisplayName(x.nombre).toLowerCase()===name.toLowerCase());
+    if(duplicate){alert('Ya existe una categoría con ese nombre.');return;}
+    state.savingsCategoryNames ||= {}; state.savingsCategoryNames[String(c.id)]=name; save(); renderAssets(); toast('Nombre local actualizado');
+  });
+}
+function editIncomeCategoryName(categoryId){
+  const c=incomeCategoryById(categoryId); if(!c)return;
+  const current=incomeCategoryDisplayName(c.id,c.nombre);
+  openForm('Nombre local de la categoría',[{name:'Nombre',key:'name',type:'text',value:current}],val=>{
+    const name=String(val.name||'').trim(); if(!name)return;
+    const duplicate=(state.phase3IncomeCatalog?.categorias||[]).some(x=>String(x.id)!==String(c.id) && incomeCategoryDisplayName(x.id,x.nombre).toLowerCase()===name.toLowerCase());
+    if(duplicate){alert('Ya existe una categoría con ese nombre.');return;}
+    state.incomeCategoryNames ||= {}; state.incomeCategoryNames[String(c.id)]=name; save(); renderIncome(); toast('Nombre local actualizado');
+  });
+}
+function toggleIncomeOrganize(){
+  state.incomeOrganizeMode=state.incomeOrganizeMode!==true;
+  incomeOrganizeMode=state.incomeOrganizeMode;
+  save(); renderIncome(); toast(incomeOrganizeMode?'Modo organización activado':'Orden guardado');
+}
 function orderedAssetCategories(){const existing=[...new Set(state.assetItems.map(x=>x.category).filter(Boolean))];const order=(state.assetCategoryOrder||[]).filter(c=>existing.includes(c));existing.forEach(c=>{if(!order.includes(c))order.push(c);});return order;}
 function orderedAssetSubcategories(category){const existing=state.assetItems.filter(x=>x.category===category).map(x=>x.name).filter(Boolean);const saved=(state.assetSubcategoryOrder&&state.assetSubcategoryOrder[category])||[];const order=saved.filter(s=>existing.includes(s));existing.forEach(s=>{if(!order.includes(s))order.push(s);});return order;}
 function moveAssetCategory(category,direction){const order=orderedAssetCategories(),i=order.indexOf(category),j=i+direction;if(i<0||j<0||j>=order.length)return;[order[i],order[j]]=[order[j],order[i]];state.assetCategoryOrder=order;save();renderAssets();}
@@ -611,14 +678,38 @@ function renderHome(){
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);
   $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
   const cats=categoryTotals(),max=cats[0]?.[1]||1;$('#homeExpenseList').innerHTML=cats.map(([name,v])=>`<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="category-bar"><span style="width:${Math.round(v/max*100)}%"></span></div></div><div class="category-value">${money(v)}</div></div>`).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
-  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=orderedAssetCategories().flatMap(cat=>orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean)).filter(x=>x.homeVisible===true);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${x.category}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';
+  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=orderedAssetCategories().flatMap(cat=>orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean)).filter(x=>x.homeVisible===true);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${savingsCategoryDisplayName(x.category)}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';
 }
 function miniRow(a,b){return `<div class="mini-row"><span>${esc(a)}</span><strong>${b}</strong></div>`;}
 
 function renderIncome(){
-  const wrap=$('#incomeRows');wrap.innerHTML=state.incomeItems.map(x=>{const val=getMonthValue(x,currentMonth);return `<div class="data-row"><div class="row-top"><div class="row-title"><strong>${esc(x.name)}</strong><small>Año: ${money(annualTotal(x))}</small></div><div class="row-actions"><button class="small-icon" title="Editar" onclick="editIncome('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteIncome('${x.id}')">🗑️</button></div></div><input class="value-input" inputmode="numeric" aria-label="${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateIncome('${x.id}', this.value)"></div>`;}).join('')||'<div class="empty">Agrega tu primer ingreso.</div>';
+  document.body.classList.toggle('income-organizing', incomeOrganizeMode);
+  const organizeBtn=$('#toggleIncomeOrganize');
+  if(organizeBtn){organizeBtn.textContent=incomeOrganizeMode?'✓ Terminar organización':'↕ Organizar';organizeBtn.classList.toggle('organize-active',incomeOrganizeMode);}
+  const wrap=$('#incomeRows');
+  const items=orderedIncomeItems();
+  wrap.innerHTML=items.map((x,index)=>{
+    const val=getMonthValue(x,currentMonth), canUp=index>0, canDown=index<items.length-1;
+    const categoryName=incomeCategoryDisplayName(x.categoryId,x.category||'');
+    const categoryId=x.categoryId||'';
+    return `<div class="data-row income-data-row">
+      <div class="row-top">
+        <div class="row-title">
+          <div class="income-category-line"><span class="income-category-label">${esc(categoryName)}</span><button class="small-icon income-category-edit organize-only" title="Editar nombre local de categoría" aria-label="Editar nombre local de categoría" data-action="edit-income-category" data-category-id="${escAttr(categoryId)}">✏️</button></div>
+          <strong>${esc(x.name)}</strong><small>Año: ${money(annualTotal(x))}</small>
+        </div>
+        <div class="row-actions">
+          <button class="order-text-btn organize-only" title="Mover ingreso arriba" aria-label="Mover ingreso arriba" data-action="move-income-up" data-id="${escAttr(x.id)}" ${canUp?'':'disabled'}>↑</button>
+          <button class="order-text-btn organize-only" title="Mover ingreso abajo" aria-label="Mover ingreso abajo" data-action="move-income-down" data-id="${escAttr(x.id)}" ${canDown?'':'disabled'}>↓</button>
+          <button class="small-icon" title="Editar" onclick="editIncome('${x.id}')">✏️</button><button class="small-icon" title="Eliminar" onclick="deleteIncome('${x.id}')">🗑️</button>
+        </div>
+      </div>
+      <input class="value-input" inputmode="numeric" aria-label="${esc(x.name)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateIncome('${x.id}', this.value)">
+    </div>`;
+  }).join('')||'<div class="empty">Agrega tu primer ingreso.</div>';
   $('#incomeViewTotal').textContent=money(totals().income);
 }
+
 async function updateIncome(id_,raw){
   const x=state.incomeItems.find(i=>i.id===id_);
   if(!x)return;
@@ -900,7 +991,7 @@ function renderAssets(){
   wrap.innerHTML=cats.map((cat,catIndex)=>{
     const items=orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean);
     const canUp=catIndex>0,canDown=catIndex<cats.length-1;
-    return `<section class="asset-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(cat)}</div></div><div class="category-header-actions"><button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-asset-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-asset-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon add-sub-btn" title="Agregar cuenta a ${escAttr(cat)}" aria-label="Agregar cuenta" data-action="add-asset-to-category" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map((x,index)=>assetItemHTML(x,index,items.length,cat)).join('')}</div></section>`;
+    return `<section class="asset-category-card"><div class="category-header"><div class="category-heading-info"><div class="category-title">${esc(savingsCategoryDisplayName(cat))}</div></div><div class="category-header-actions"><button class="small-icon category-edit-btn" title="Cambiar nombre local" aria-label="Cambiar nombre local" data-action="edit-savings-category" data-category="${escAttr(cat)}">✏️</button><button class="order-text-btn organize-only" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-asset-category-up" data-category="${escAttr(cat)}" ${canUp?'':'disabled'}>↑</button><button class="order-text-btn organize-only" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-asset-category-down" data-category="${escAttr(cat)}" ${canDown?'':'disabled'}>↓</button><button class="small-icon add-sub-btn" title="Agregar cuenta a ${escAttr(cat)}" aria-label="Agregar cuenta" data-action="add-asset-to-category" data-category="${escAttr(cat)}">＋</button></div></div><div class="category-items">${items.map((x,index)=>assetItemHTML(x,index,items.length,cat)).join('')}</div></section>`;
   }).join('')||'<div class="empty">Agrega una cuenta o inversión.</div>';
   const a=assetTotals();$('#copTotal').textContent=money(a.cop);$('#usdTotal').textContent=money(a.usd,'USD');
 }
@@ -1289,6 +1380,6 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;
+window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;
 
 boot();

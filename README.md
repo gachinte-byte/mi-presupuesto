@@ -1,4 +1,4 @@
-# Mi Presupuesto — V45
+# Mi Presupuesto — V50
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
@@ -92,3 +92,11 @@ Ingresos:
 - Los saldos/valores históricos NO se eliminan al desactivar una cuenta o ingreso.
 - Escrituras protegidas con `PRESUPUESTO_WRITE_KEY`.
 - Las categorías centrales existentes se mantienen; la gestión solicitada se aplica a cuentas/productos y subcategorías de ingreso.
+
+
+## V50 — estética y organización local
+- Ahorros e inversiones mantiene la estructura D1 de cuentas/categorías, pero permite cambiar **localmente** el nombre visible de cada categoría (por ejemplo, CDTS → CDTS personales). Estos nombres no modifican D1.
+- Se eliminó el rótulo “TERCERA TABLA” y el texto auxiliar debajo de “Ahorros e inversiones”.
+- Ingresos incorpora el menú **↕ Organizar** para ordenar localmente las líneas de ingreso en el orden elegido por el usuario.
+- En Ingresos, cada línea muestra su categoría como etiqueta visual y, dentro del modo organización, permite cambiar localmente el nombre visible de esa categoría.
+- La organización y los nombres locales se guardan en localStorage y no escriben cambios estructurales en D1.

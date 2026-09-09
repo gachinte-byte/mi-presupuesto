@@ -164,3 +164,15 @@ body.expense-organizing .central-expense-item .row-title strong,body.expense-org
   background:#d9dce5;
   border-color:#d0d3dd;
 }
+
+/* V50: jerarquía y organización local de Ingresos + nombres locales de Ahorros */
+.income-data-row{padding:15px 14px;background:#fff}
+.income-data-row + .income-data-row{border-top:1px solid var(--line)}
+.income-category-line{display:flex;align-items:center;gap:4px;min-height:22px;margin-bottom:2px}
+.income-category-label{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#eef0f5;color:var(--purple);font-size:9px;font-weight:850;letter-spacing:.02em;text-transform:uppercase}
+.income-category-edit{width:27px;height:27px;font-size:12px}
+#view-income .page-title-row h2,#view-savings .page-title-row h2{margin-bottom:2px}
+#view-income .rows-card{border-radius:16px}
+#view-savings .category-title{letter-spacing:-.01em}
+@media(max-width:430px){.income-data-row{padding:14px 11px}.income-category-label{font-size:8px}.income-category-edit{width:25px;height:25px}}
+body.income-organizing .income-data-row{background:#faf9fc}

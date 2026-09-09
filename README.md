@@ -1,4 +1,4 @@
-# Mi Presupuesto — V50
+# Mi Presupuesto — V51
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
@@ -94,7 +94,7 @@ Ingresos:
 - Las categorías centrales existentes se mantienen; la gestión solicitada se aplica a cuentas/productos y subcategorías de ingreso.
 
 
-## V50 — estética y organización local
+## V51 — estética y organización local
 - Ahorros e inversiones mantiene la estructura D1 de cuentas/categorías, pero permite cambiar **localmente** el nombre visible de cada categoría (por ejemplo, CDTS → CDTS personales). Estos nombres no modifican D1.
 - Se eliminó el rótulo “TERCERA TABLA” y el texto auxiliar debajo de “Ahorros e inversiones”.
 - Ingresos incorpora el menú **↕ Organizar** para ordenar localmente las líneas de ingreso en el orden elegido por el usuario.

@@ -275,16 +275,17 @@ async function syncCentralExpenseValues(month=currentMonth){
     let loaded=0, skipped=0, nonZero=0;
 
     // Confirmada la recarga: el mes vuelve a quedar completamente basado en
-    // D1. Primero eliminamos los valores locales del mes; las subcategorías
-    // que D1 no devuelve quedan implícitamente en $0.
-    if(hasManualEdits){
-      Object.keys(state.centralExpenseValues||{}).forEach(key=>{
-        if(key.startsWith(`${month}|`)) delete state.centralExpenseValues[key];
-      });
-      Object.keys(state.centralExpenseImported||{}).forEach(key=>{
-        if(key.startsWith(`${month}|`)) delete state.centralExpenseImported[key];
-      });
-    }
+    // D1. Siempre limpiamos los valores locales del mes antes de cargar la
+    // respuesta. Esto es importante cuando D1 devuelve 0 movimientos: un mes
+    // realmente vacío debe convertirse en $0, no conservar datos antiguos.
+    // Si había ediciones manuales, esta limpieza solo ocurre después de que
+    // el usuario confirmó arriba que quería reemplazarlas.
+    Object.keys(state.centralExpenseValues||{}).forEach(key=>{
+      if(key.startsWith(`${month}|`)) delete state.centralExpenseValues[key];
+    });
+    Object.keys(state.centralExpenseImported||{}).forEach(key=>{
+      if(key.startsWith(`${month}|`)) delete state.centralExpenseImported[key];
+    });
 
     for(const row of (data.subcategorias||[])){
       const subId=String(row.subcategoria_id||'').trim();
@@ -304,7 +305,9 @@ async function syncCentralExpenseValues(month=currentMonth){
     const movimientos=Number(data?.movimientos||0);
     const noClas=Number(data?.debug?.noClasificados||0);
     if(movimientos===0){
-      alert(`No encontré gastos confirmados en ${monthLabel(month)} en D1.`);
+      alert(`D1 no tiene gastos confirmados en ${monthLabel(month)}.
+
+El mes fue actualizado correctamente y todos los valores quedaron en $0.`);
     }else if(nonZero===0 && skipped===0){
       alert(`D1 encontró ${money(totalD1)} en ${movimientos} movimientos, pero no pudo asociarlos al catálogo.\n\nNo se modificaron tus valores manuales.`);
     }else{

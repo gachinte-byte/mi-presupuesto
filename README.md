@@ -1,4 +1,4 @@
-V68 — Análisis y Gráficos: dona general de Gastos conservada; Total gastos y categorías en barras interactivas sin línea; gráficos de patrimonio/cuenta mantienen su visualización previa.
+V69 — Corrección de Notas e interactividad de gráficos: notas funcionales en Inicio y Análisis; puntos de patrimonio/cuentas táctiles; dona general de Gastos más grande y centrada en móvil; Gastos conserva dona/barras según selección y Ahorros/Inversiones conserva líneas.
 
 # Mi Presupuesto — V63
 

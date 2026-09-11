@@ -208,3 +208,20 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .chart-bar-group:focus{outline:none}
 .analytics-notes-card .monthly-notes-toggle{position:relative;z-index:2}
 .analytics-notes-card .monthly-notes-panel{position:relative;z-index:1}
+
+
+/* V69 - interactividad táctil y dona móvil centrada */
+.chart-hit-area{pointer-events:all;cursor:pointer;touch-action:manipulation}
+.chart-svg-wrap{touch-action:pan-y}
+.pie-mobile{display:none}
+@media(max-width:680px){
+  .analytics-expense-card .pie-chart-wrap{display:block;padding:4px 0 6px;overflow:hidden}
+  .analytics-expense-card .pie-desktop{display:none}
+  .analytics-expense-card .pie-mobile{display:block;width:100%;max-height:none}
+  .analytics-expense-card .pie-mobile svg{width:100%;height:auto;display:block}
+  .analytics-expense-card .pie-legend{padding:4px 8px 6px}
+}
+@media(min-width:681px){
+  .analytics-expense-card .pie-mobile{display:none}
+  .analytics-expense-card .pie-desktop{display:block}
+}

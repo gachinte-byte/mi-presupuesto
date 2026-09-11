@@ -495,7 +495,6 @@ function bindEvents() {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
-    if (action === 'toggle-analytics-notes') { toggleAnalyticsNotes(e); return; }
     if (action === 'edit-category') editCategory(btn.dataset.category);
     if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
     if (action === 'move-category-up') moveExpenseCategory(btn.dataset.category,-1);
@@ -539,13 +538,16 @@ function bindEvents() {
   $('#nextYear').onclick=()=>{analyticsYear++;renderAnalytics();};
   $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
-  $('#toggleMonthlyNotes').onclick=toggleMonthlyNotes;
+  $('#toggleMonthlyNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleMonthlyNotes();};
   $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
+  $('#monthlyNotesPanel').addEventListener('click',handleMonthlyNotesClick);
+  $('#toggleAnalyticsNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleAnalyticsNotes();};
   $('#analyticsNotesPanel').addEventListener('input',handleAnalyticsNotesInput);
   $('#analyticsNotesPanel').addEventListener('click',handleAnalyticsNotesClick);
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
+  document.addEventListener('pointerdown',handleChartPointerDown,{passive:true});
   document.addEventListener('click',handleChartClick);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
@@ -554,7 +556,6 @@ function bindEvents() {
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
   document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
-  $('#monthlyNotesPanel').addEventListener('click',handleMonthlyNotesClick);
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
 
@@ -596,7 +597,6 @@ function renderAnalyticsNotes(){
   if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
   panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input analytics-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-analytics-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-analytics-note">＋ Agregar nota</button>':'');
   panel.classList.toggle('hidden',!analyticsNotesOpen);
-  panel.hidden=!analyticsNotesOpen;
   toggle.setAttribute('aria-expanded',analyticsNotesOpen?'true':'false');
   if(chevron)chevron.textContent=analyticsNotesOpen?'⌃':'⌄';
 }
@@ -1347,7 +1347,7 @@ function lineChart(labels,values,title){
   const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');
   const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
-  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
+  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="14" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
 function barLineChart(labels,values,title){
@@ -1382,23 +1382,26 @@ function pieChart(series){
   const rows=series.map(s=>({name:s.category,value:s.values.reduce((sum,v)=>sum+v,0)})).filter(x=>x.value>0);
   if(!rows.length)return '<div class="empty">Sin gastos registrados en este año.</div>';
   const total=rows.reduce((sum,x)=>sum+x.value,0);
-  const W=760,H=340,cx=260,cy=170,r=118,inner=62;
-  let angle=-Math.PI/2;
-  const paths=[];
-  rows.forEach((row,i)=>{
-    const start=angle, end=angle+(row.value/total)*Math.PI*2;
-    const large=end-start>Math.PI?1:0;
-    const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
-    const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
-    const ix2=cx+inner*Math.cos(end),iy2=cy+inner*Math.sin(end);
-    const ix1=cx+inner*Math.cos(start),iy1=cy+inner*Math.sin(start);
-    const d=`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`;
-    const pct=Math.round(row.value/total*100);
-    paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="pie-slice chart-hit" data-label="${escAttr(row.name)}" data-value="${escAttr(money(row.value))} · ${pct}%"><title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title></path>`);
-    angle=end;
-  });
+  const W=760,H=340;
+  function buildPieSvg(cx,cy,r,inner,extraClass){
+    let angle=-Math.PI/2;
+    const paths=[];
+    rows.forEach((row,i)=>{
+      const start=angle, end=angle+(row.value/total)*Math.PI*2;
+      const large=end-start>Math.PI?1:0;
+      const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
+      const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
+      const ix2=cx+inner*Math.cos(end),iy2=cy+inner*Math.sin(end);
+      const ix1=cx+inner*Math.cos(start),iy1=cy+inner*Math.sin(start);
+      const d=`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`;
+      const pct=Math.round(row.value/total*100);
+      paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="pie-slice chart-hit" data-label="${escAttr(row.name)}" data-value="${escAttr(money(row.value))} · ${pct}%"><title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title></path>`);
+      angle=end;
+    });
+    return `<div class="chart-svg-wrap pie-svg-wrap ${extraClass}"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría"><g>${paths.join('')}</g><text x="${cx}" y="${cy-2}" text-anchor="middle" class="pie-center-total">${esc(money(total))}</text><text x="${cx}" y="${cy+18}" text-anchor="middle" class="pie-center-label">Total año</text></svg></div>`;
+  }
   const legend=rows.map((row,i)=>{const pct=Math.round(row.value/total*100);return `<div class="pie-legend-row"><span><i style="background:${chartPalette[i%chartPalette.length]}"></i><strong>${esc(row.name)}</strong></span><b>${money(row.value)}</b><small>${pct}%</small></div>`;}).join('');
-  return `<div class="pie-chart-wrap"><div class="chart-svg-wrap pie-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría"><g>${paths.join('')}</g><text x="${cx}" y="${cy-2}" text-anchor="middle" class="pie-center-total">${esc(money(total))}</text><text x="${cx}" y="${cy+18}" text-anchor="middle" class="pie-center-label">Total año</text></svg></div><div class="pie-legend">${legend}</div></div>`;
+  return `<div class="pie-chart-wrap">${buildPieSvg(260,170,118,62,'pie-desktop')} ${buildPieSvg(380,170,145,74,'pie-mobile')}<div class="pie-legend">${legend}</div></div>`;
 }
 
 function multiLineChart(labels,series){
@@ -1413,6 +1416,13 @@ function multiLineChart(labels,series){
 function handleChartPointer(e){
   const dot=e.target.closest?.('.chart-hit');if(!dot)return;
   const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(!tip)return;
+  tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');positionChartTooltip(e,tip,wrap);
+}
+function handleChartPointerDown(e){
+  const dot=e.target.closest?.('.chart-hit');if(!dot)return;
+  const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(!tip)return;
+  wrap?.querySelectorAll('.chart-hit[data-pinned="1"]').forEach(d=>{d.dataset.pinned='0';});
+  dot.dataset.pinned='1';
   tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');positionChartTooltip(e,tip,wrap);
 }
 function handleChartPointerMove(e){

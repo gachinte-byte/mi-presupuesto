@@ -197,3 +197,14 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .chart-bar-value-label{opacity:0;pointer-events:none;font-size:11px;font-weight:850;fill:var(--ink);transition:opacity .12s ease}
 .chart-bar-group:hover .chart-bar-value-label,.chart-bar-group:focus .chart-bar-value-label{opacity:1}
 @media(max-width:680px){.chart-bar-value-label{font-size:9px}}
+
+/* V67 - graficos unificados en barras + conexion lineal */
+.chart-bar-line{stroke:var(--purple-2);stroke-width:2.5;pointer-events:none}
+.chart-bar-line-dot{fill:var(--purple-2);stroke:#fff;stroke-width:2}
+.analytics-expense-card .chart-bar{fill:var(--red)}
+.analytics-wealth-card .chart-bar{fill:var(--navy-2)}
+.analytics-wealth-card .chart-bar-line,.analytics-wealth-card .chart-bar-line-dot{stroke:var(--navy);fill:var(--navy)}
+.analytics-expense-card .chart-bar-line,.analytics-expense-card .chart-bar-line-dot{stroke:var(--red);fill:var(--red)}
+.chart-bar-group:focus{outline:none}
+.analytics-notes-card .monthly-notes-toggle{position:relative;z-index:2}
+.analytics-notes-card .monthly-notes-panel{position:relative;z-index:1}

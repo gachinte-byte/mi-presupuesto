@@ -495,6 +495,7 @@ function bindEvents() {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
+    if (action === 'toggle-analytics-notes') { toggleAnalyticsNotes(e); return; }
     if (action === 'edit-category') editCategory(btn.dataset.category);
     if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
     if (action === 'move-category-up') moveExpenseCategory(btn.dataset.category,-1);
@@ -540,7 +541,6 @@ function bindEvents() {
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
   $('#toggleMonthlyNotes').onclick=toggleMonthlyNotes;
   $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
-  $('#toggleAnalyticsNotes').onclick=toggleAnalyticsNotes;
   $('#analyticsNotesPanel').addEventListener('input',handleAnalyticsNotesInput);
   $('#analyticsNotesPanel').addEventListener('click',handleAnalyticsNotesClick);
   document.addEventListener('pointerover',handleChartPointer);
@@ -1240,12 +1240,12 @@ function renderAnalytics(){
   const expSeries=annualExpenseCategories(analyticsYear);
   const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+(centralCatalogMode()?centralExpenseTotal(m):state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0)),0);
   $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);
-  $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
+  $('#wealthChart').innerHTML=barLineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
   renderWealthLegend(wealth);
   renderAssetSelector();
   const asset=state.assetItems.find(x=>x.id===selectedAssetChart);
   $('#assetChart').innerHTML=asset
-    ? lineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`)
+    ? barLineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`)
     : '<div class="empty chart-note">Selecciona una cuenta para ver su evolución mensual.</div>';
 
   renderExpenseSelector(expSeries);
@@ -1254,19 +1254,19 @@ function renderAnalytics(){
   if(selectedExpenseCategory==='all'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
     labelEl.textContent='Total de gastos del año';
-    $('#expenseChart').innerHTML=pieChart(expSeries);
+    $('#expenseChart').innerHTML=barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }else if(selectedExpenseCategory==='total'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
     labelEl.textContent='Total de gastos del año';
-    $('#expenseChart').innerHTML=barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
+    $('#expenseChart').innerHTML=barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }else{
     const selected=expSeries.find(s=>s.category===selectedExpenseCategory);
     const selectedTotal=selected ? selected.values.reduce((sum,v)=>sum+v,0) : annualExpenseTotal;
     $('#chartExpensesYear').textContent=money(selectedTotal);
     labelEl.textContent=selected ? `Gastos de ${selected.category} en el año` : 'Total de gastos del año';
     $('#expenseChart').innerHTML=selected
-      ? lineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
-      : barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
+      ? barLineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
+      : barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }
   $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
     ? expSeries.map((s,i)=>{const total=s.values.reduce((sum,v)=>sum+v,0);const share=annualExpenseTotal?Math.round(total/annualExpenseTotal*100):0;return `<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)} · ${money(total)} (${share}%)</span>`;}).join('')||'<span>Sin gastos registrados en este año.</span>'
@@ -1350,6 +1350,17 @@ function lineChart(labels,values,title){
   const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
+function barLineChart(labels,values,title){
+  const W=760,H=300,g=chartGeometry(values,W,H);
+  const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const bw=Math.min(42,Math.max(18,(g.w/labels.length)*0.58));
+  const bars=values.map((v,i)=>{const x=g.x(i)-bw/2;const y=g.y(v);const base=g.y(g.min);const h=Math.max(1,base-y);const valueLabel=money(v);return `<g class="chart-bar-group chart-hit" data-label="${escAttr(labels[i])}" data-value="${escAttr(valueLabel)}" tabindex="0" role="img" aria-label="${escAttr(labels[i]+' '+valueLabel)}"><rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" class="chart-bar"></rect><title>${esc(labels[i])}: ${esc(valueLabel)}</title></g>`;}).join('');
+  const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');
+  const line=`<polyline points="${points}" class="chart-bar-line" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` + values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="4" class="chart-bar-line-dot" pointer-events="none"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle>`).join('');
+  const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
+  return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escAttr(title)}"><g>${grid}</g>${bars}${line}${xlabels}</svg></div>`;
+}
+
 function barChart(labels,values,title){
   const W=760,H=300,g=chartGeometry(values,W,H);
   const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');

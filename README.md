@@ -1,4 +1,4 @@
-V66 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
+V67 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
 
 # Mi Presupuesto — V63
 
@@ -141,4 +141,4 @@ Conecta el indicador informativo de última fecha de gasto con `ultima_fecha_gas
 V63: Configuración simplificada. La conexión con Gastos IA usa por defecto el Worker oficial `https://gastos-ia.gachinte.workers.dev`; la URL ya no se edita desde la interfaz. La clave de escritura D1 queda dentro de Configuración avanzada.
 
 
-V66: corrigió el desplegable de Notas de Análisis con estado explícito y agregó valores visibles al pasar el cursor/foco sobre las barras del gráfico de Total gastos.
+V67: corrigió el desplegable de Notas de Análisis con estado explícito y agregó valores visibles al pasar el cursor/foco sobre las barras del gráfico de Total gastos.

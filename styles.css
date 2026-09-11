@@ -225,3 +225,14 @@ body.income-organizing .income-data-row{background:#faf9fc}
   .analytics-expense-card .pie-mobile{display:none}
   .analytics-expense-card .pie-desktop{display:block}
 }
+
+/* V70 - interacción táctil robusta para notas y gráficos de línea */
+.monthly-notes-toggle,.monthly-note-add,.monthly-note-delete{touch-action:manipulation;-webkit-user-select:none;user-select:none;}
+.monthly-note-input{touch-action:auto;}
+.chart-svg-wrap{position:relative;}
+.chart-hit-area{pointer-events:all!important;touch-action:none!important;-webkit-tap-highlight-color:transparent;}
+@media(max-width:680px){
+  .analytics-wealth-card .chart-wrap svg{min-height:290px;}
+  .analytics-wealth-card .chart-hit-area{stroke:transparent;stroke-width:10px;}
+  .analytics-expense-card .pie-mobile svg{transform:scale(1.10);transform-origin:center;}
+}

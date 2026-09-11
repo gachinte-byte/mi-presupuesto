@@ -539,15 +539,16 @@ function bindEvents() {
   $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
   $('#toggleMonthlyNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleMonthlyNotes();};
-  $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
-  $('#monthlyNotesPanel').addEventListener('click',handleMonthlyNotesClick);
   $('#toggleAnalyticsNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleAnalyticsNotes();};
-  $('#analyticsNotesPanel').addEventListener('input',handleAnalyticsNotesInput);
-  $('#analyticsNotesPanel').addEventListener('click',handleAnalyticsNotesClick);
+  document.addEventListener('input',handleMonthlyNotesInput);
+  document.addEventListener('input',handleAnalyticsNotesInput);
+  document.addEventListener('click',handleMonthlyNotesClick);
+  document.addEventListener('click',handleAnalyticsNotesClick);
+  document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.closest?.('.chart-hit-area')){e.preventDefault();const dot=e.target.closest('.chart-hit-area');const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(tip){tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');dot.dataset.pinned='1';}}});
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
-  document.addEventListener('pointerdown',handleChartPointerDown,{passive:true});
+  document.addEventListener('pointerdown',handleChartPointerDown,{passive:false});
   document.addEventListener('click',handleChartClick);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
@@ -582,6 +583,41 @@ function toggleMonthlyNotes(){
   panel.classList.toggle('hidden');
   renderMonthlyNotes();
 }
+function handleMonthlyNotesInput(e){
+  const input=e.target.closest?.('.monthly-note-input:not(.analytics-note-input)');
+  if(!input)return;
+  const index=Number(input.dataset.noteIndex);
+  const notes=monthlyNotesFor(currentMonth);
+  if(!Number.isInteger(index))return;
+  notes[index]=String(input.value||'').slice(0,180);
+  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  save();
+  const countEl=$('#monthlyNotesCount');
+  if(countEl)countEl.textContent=notes.filter(n=>String(n||'').trim()).length?`· ${notes.filter(n=>String(n||'').trim()).length}`:'';
+}
+function handleMonthlyNotesClick(e){
+  const btn=e.target.closest?.('[data-action="add-monthly-note"],[data-action="delete-monthly-note"]');
+  if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const notes=monthlyNotesFor(currentMonth);
+  if(btn.dataset.action==='add-monthly-note'){
+    if(notes.length<3) notes.push('');
+  }else{
+    const index=Number(btn.dataset.index);
+    if(Number.isInteger(index))notes.splice(index,1);
+  }
+  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  save();
+  renderMonthlyNotes();
+  if(btn.dataset.action==='add-monthly-note'){
+    const panel=$('#monthlyNotesPanel');
+    const inputs=panel?.querySelectorAll('.monthly-note-input:not(.analytics-note-input)');
+    const last=inputs?.[inputs.length-1];
+    if(last)requestAnimationFrame(()=>last.focus());
+  }
+}
+
 function analyticsNotesFor(month=currentMonth){
   state.analyticsNotes ||= {};
   if(!Array.isArray(state.analyticsNotes[month])) state.analyticsNotes[month]=[];
@@ -618,8 +654,10 @@ function handleAnalyticsNotesInput(e){
   const countEl=$('#analyticsNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
 }
 function handleAnalyticsNotesClick(e){
-  const btn=e.target.closest('[data-action="add-analytics-note"],[data-action="delete-analytics-note"]');
+  const btn=e.target.closest?.('[data-action="add-analytics-note"],[data-action="delete-analytics-note"]');
   if(!btn)return;
+  e.preventDefault();
+  e.stopPropagation();
   const notes=analyticsNotesFor(currentMonth);
   if(btn.dataset.action==='add-analytics-note'){
     if(notes.length<3) notes.push('');
@@ -1347,7 +1385,7 @@ function lineChart(labels,values,title){
   const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');
   const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
-  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="14" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
+  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="22" class="chart-hit chart-hit-area" tabindex="0" role="button" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
 function barLineChart(labels,values,title){
@@ -1442,6 +1480,7 @@ function handleChartPointerOut(e){
   const wrap=from.closest('.chart-svg-wrap');wrap?.querySelector('.chart-tooltip')?.classList.remove('show');
 }
 function handleChartClick(e){
+  if(e.target.closest?.('.monthly-notes-card'))return;
   const dot=e.target.closest?.('.chart-hit');
   if(dot){
     e.stopPropagation();

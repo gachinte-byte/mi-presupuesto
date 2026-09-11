@@ -236,3 +236,18 @@ body.income-organizing .income-data-row{background:#faf9fc}
   .analytics-wealth-card .chart-hit-area{stroke:transparent;stroke-width:10px;}
   .analytics-expense-card .pie-mobile svg{transform:scale(1.10);transform-origin:center;}
 }
+
+
+/* V71 - notas de Análisis por año y tipografía móvil de gráficos */
+.analytics-notes-card .monthly-notes-panel{transition:none;}
+.chart-hit-area{fill:transparent!important;stroke:transparent!important;}
+@media(max-width:680px){
+  .chart-axis{font-size:12px!important;}
+  .chart-label{font-size:12px!important;}
+  .chart-tooltip{font-size:12px;padding:8px 10px;}
+  .analytics-wealth-card .chart-wrap svg{min-height:300px;}
+}
+@media(max-width:430px){
+  .chart-axis{font-size:11.5px!important;}
+  .chart-label{font-size:11.5px!important;}
+}

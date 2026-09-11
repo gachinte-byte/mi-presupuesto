@@ -1,4 +1,4 @@
-V70 — Corrección robusta de Notas e interacción táctil de gráficos: notas en Inicio y Análisis mediante delegación de eventos; puntos de patrimonio/cuentas con área táctil ampliada y selección por toque; dona general de Gastos más grande y centrada en móvil; Gastos conserva dona/barras según selección y Ahorros/Inversiones conserva líneas.
+V71 — Corrección robusta de Notas e interacción táctil de gráficos: notas en Inicio y Análisis mediante delegación de eventos; puntos de patrimonio/cuentas con área táctil ampliada y selección por toque; dona general de Gastos más grande y centrada en móvil; Gastos conserva dona/barras según selección y Ahorros/Inversiones conserva líneas.
 
 # Mi Presupuesto — V63
 
@@ -142,3 +142,10 @@ V63: Configuración simplificada. La conexión con Gastos IA usa por defecto el 
 
 
 V67: corrigió el desplegable de Notas de Análisis con estado explícito y agregó valores visibles al pasar el cursor/foco sobre las barras del gráfico de Total gastos.
+
+
+### V71
+- Notas de Análisis: máximo 5 y almacenamiento independiente por año (YYYY), persistente al cambiar entre años.
+- Notas de Inicio: mantienen máximo 3 por mes.
+- Gráficos de línea: área táctil transparente y amplia, sin círculos negros visibles; interacción por toque conservada.
+- Ejes de gráficos en móvil: tipografía ligeramente mayor y más legible.

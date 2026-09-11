@@ -82,11 +82,22 @@ function normalize(data) {
   for (const [month, notes] of Object.entries(data.monthlyNotes)) {
     data.monthlyNotes[month] = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean).slice(0,3) : [];
   }
-  // Notas independientes de Análisis: no comparten contenido con las notas de Inicio.
+  // Notas independientes de Análisis: se guardan por AÑO, no por mes.
+  // Se migra cualquier estructura antigua YYYY-MM a su año para no perder
+  // notas que pudieran existir de versiones anteriores.
   data.analyticsNotes ||= {};
-  for (const [month, notes] of Object.entries(data.analyticsNotes)) {
-    data.analyticsNotes[month] = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean).slice(0,3) : [];
+  const analyticsByYear = {};
+  for (const [key, notes] of Object.entries(data.analyticsNotes)) {
+    const year = String(key).slice(0,4);
+    if (!/^\d{4}$/.test(year)) continue;
+    const arr = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean) : [];
+    analyticsByYear[year] ||= [];
+    for (const note of arr) {
+      if (!analyticsByYear[year].includes(note)) analyticsByYear[year].push(note);
+    }
+    analyticsByYear[year] = analyticsByYear[year].slice(0,5);
   }
+  data.analyticsNotes = analyticsByYear;
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -495,6 +506,12 @@ function bindEvents() {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
+    // Notas: resolverlas aquí, antes que cualquier otro handler, para que
+    // funcionen también cuando los botones se crean dinámicamente al renderizar.
+    if (action === 'toggle-monthly-notes') { e.preventDefault(); e.stopPropagation(); toggleMonthlyNotes(); return; }
+    if (action === 'toggle-analytics-notes') { e.preventDefault(); e.stopPropagation(); toggleAnalyticsNotes(); return; }
+    if (action === 'add-monthly-note' || action === 'delete-monthly-note') { handleMonthlyNotesClick(e); return; }
+    if (action === 'add-analytics-note' || action === 'delete-analytics-note') { handleAnalyticsNotesClick(e); return; }
     if (action === 'edit-category') editCategory(btn.dataset.category);
     if (action === 'add-subcategory') openAddExpense(btn.dataset.category);
     if (action === 'move-category-up') moveExpenseCategory(btn.dataset.category,-1);
@@ -538,12 +555,8 @@ function bindEvents() {
   $('#nextYear').onclick=()=>{analyticsYear++;renderAnalytics();};
   $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
-  $('#toggleMonthlyNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleMonthlyNotes();};
-  $('#toggleAnalyticsNotes').onclick=(e)=>{e.preventDefault();e.stopPropagation();toggleAnalyticsNotes();};
   document.addEventListener('input',handleMonthlyNotesInput);
   document.addEventListener('input',handleAnalyticsNotesInput);
-  document.addEventListener('click',handleMonthlyNotesClick);
-  document.addEventListener('click',handleAnalyticsNotesClick);
   document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.closest?.('.chart-hit-area')){e.preventDefault();const dot=e.target.closest('.chart-hit-area');const wrap=dot.closest('.chart-svg-wrap');const tip=wrap?.querySelector('.chart-tooltip');if(tip){tip.textContent=`${dot.dataset.label}: ${dot.dataset.value}`;tip.classList.add('show');dot.dataset.pinned='1';}}});
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
@@ -618,20 +631,21 @@ function handleMonthlyNotesClick(e){
   }
 }
 
-function analyticsNotesFor(month=currentMonth){
+function analyticsNotesFor(year=analyticsYear){
   state.analyticsNotes ||= {};
-  if(!Array.isArray(state.analyticsNotes[month])) state.analyticsNotes[month]=[];
-  return state.analyticsNotes[month];
+  const key=String(year);
+  if(!Array.isArray(state.analyticsNotes[key])) state.analyticsNotes[key]=[];
+  return state.analyticsNotes[key];
 }
 function renderAnalyticsNotes(){
-  const notes=analyticsNotesFor(currentMonth);
+  const notes=analyticsNotesFor(analyticsYear);
   const countEl=$('#analyticsNotesCount');
   const panel=$('#analyticsNotesPanel');
   const toggle=$('#toggleAnalyticsNotes');
   const chevron=$('#analyticsNotesChevron');
   if(!panel||!toggle)return;
   if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
-  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input analytics-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-analytics-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-analytics-note">＋ Agregar nota</button>':'');
+  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input analytics-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-analytics-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<5?'<button type="button" class="monthly-note-add" data-action="add-analytics-note">＋ Agregar nota</button>':'');
   panel.classList.toggle('hidden',!analyticsNotesOpen);
   toggle.setAttribute('aria-expanded',analyticsNotesOpen?'true':'false');
   if(chevron)chevron.textContent=analyticsNotesOpen?'⌃':'⌄';
@@ -645,11 +659,11 @@ function handleAnalyticsNotesInput(e){
   const input=e.target.closest('.analytics-note-input');
   if(!input)return;
   const index=Number(input.dataset.noteIndex);
-  const notes=analyticsNotesFor(currentMonth);
+  const notes=analyticsNotesFor(analyticsYear);
   if(!Number.isInteger(index))return;
   notes[index]=String(input.value||'').slice(0,180);
   while(notes.length && !String(notes[notes.length-1]||'').trim()) notes.pop();
-  state.analyticsNotes[currentMonth]=notes.slice(0,3);
+  state.analyticsNotes[String(analyticsYear)]=notes.slice(0,5);
   save();
   const countEl=$('#analyticsNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
 }
@@ -658,14 +672,14 @@ function handleAnalyticsNotesClick(e){
   if(!btn)return;
   e.preventDefault();
   e.stopPropagation();
-  const notes=analyticsNotesFor(currentMonth);
+  const notes=analyticsNotesFor(analyticsYear);
   if(btn.dataset.action==='add-analytics-note'){
-    if(notes.length<3) notes.push('');
+    if(notes.length<5) notes.push('');
   }else{
     const index=Number(btn.dataset.index);
     if(Number.isInteger(index))notes.splice(index,1);
   }
-  state.analyticsNotes[currentMonth]=notes.slice(0,3);
+  state.analyticsNotes[String(analyticsYear)]=notes.slice(0,5);
   save();
   renderAnalyticsNotes();
   const panel=$('#analyticsNotesPanel');
@@ -1385,7 +1399,9 @@ function lineChart(labels,values,title){
   const points=values.map((v,i)=>`${g.x(i)},${g.y(v)}`).join(' ');
   const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
-  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="22" class="chart-hit chart-hit-area" tabindex="0" role="button" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
+  // Círculo transparente grande = área táctil; punto pequeño = indicador visual.
+  // El área de interacción nunca debe pintarse de negro en Safari/iPhone.
+  const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="18" fill="transparent" stroke="transparent" stroke-width="14" pointer-events="all" class="chart-hit chart-hit-area" tabindex="0" role="button" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
 function barLineChart(labels,values,title){

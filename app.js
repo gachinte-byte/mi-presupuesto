@@ -384,6 +384,22 @@ async function writePhase3Resource(path, method, body=null){
   return data;
 }
 
+async function syncLatestExpenseDate(month=currentMonth){
+  const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
+  if(!apiUrl) return;
+  try{
+    const res=await fetch(`${apiUrl}/presupuesto/gastos?mes=${encodeURIComponent(month)}`,{headers:{'Accept':'application/json'},cache:'no-store'});
+    const data=await res.json().catch(()=>null);
+    if(!res.ok || !data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+    centralLatestExpenseDate=data?.ultima_fecha_gasto||null;
+    updateLatestExpenseInfo();
+  }catch(err){
+    console.warn('No se pudo consultar la última fecha de gastos:',err);
+    centralLatestExpenseDate=null;
+    updateLatestExpenseInfo();
+  }
+}
+
 async function syncPhase3ReadOnly(month=currentMonth){
   const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl) return;
@@ -433,6 +449,9 @@ async function syncPhase3ReadOnly(month=currentMonth){
     }
     state.phase3ReadOnlySyncedAt=new Date().toISOString();
     save();
+    // La última fecha de gasto se consulta por separado para que el indicador
+    // aparezca también al abrir la app y se actualice al cambiar de mes.
+    await syncLatestExpenseDate(month);
   }catch(err){
     console.warn('Fase 3 lectura no disponible:',err);
     toast('No se pudo actualizar Ahorros e Ingresos desde D1');

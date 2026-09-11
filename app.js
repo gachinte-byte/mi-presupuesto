@@ -518,7 +518,8 @@ function updateVisibleMonthLabels(){
     savingsMonthLabel:label,
     incomeMonthLabel:label,
     expensesViewTitle:`Gastos · ${label}`,
-    incomeViewTitle:`Ingresos · ${label}`
+    incomeViewTitle:`Ingresos · ${label}`,
+    savingsViewTitle:`Ahorros e inversiones · ${label}`
   };
   Object.entries(ids).forEach(([id,text])=>{const el=document.getElementById(id);if(el)el.textContent=text;});
 }

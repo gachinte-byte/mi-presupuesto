@@ -1,4 +1,4 @@
-V64 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
+V65 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
 
 # Mi Presupuesto — V63
 

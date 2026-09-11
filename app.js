@@ -81,6 +81,11 @@ function normalize(data) {
   for (const [month, notes] of Object.entries(data.monthlyNotes)) {
     data.monthlyNotes[month] = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean).slice(0,3) : [];
   }
+  // Notas independientes de Análisis: no comparten contenido con las notas de Inicio.
+  data.analyticsNotes ||= {};
+  for (const [month, notes] of Object.entries(data.analyticsNotes)) {
+    data.analyticsNotes[month] = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean).slice(0,3) : [];
+  }
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -536,6 +541,7 @@ function bindEvents() {
   $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
   $('#toggleAnalyticsNotes').onclick=toggleAnalyticsNotes;
   $('#analyticsNotesPanel').addEventListener('input',handleAnalyticsNotesInput);
+  $('#analyticsNotesPanel').addEventListener('click',handleAnalyticsNotesClick);
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
@@ -574,15 +580,20 @@ function toggleMonthlyNotes(){
   panel.classList.toggle('hidden');
   renderMonthlyNotes();
 }
+function analyticsNotesFor(month=currentMonth){
+  state.analyticsNotes ||= {};
+  if(!Array.isArray(state.analyticsNotes[month])) state.analyticsNotes[month]=[];
+  return state.analyticsNotes[month];
+}
 function renderAnalyticsNotes(){
-  const notes=monthlyNotesFor(currentMonth);
+  const notes=analyticsNotesFor(currentMonth);
   const countEl=$('#analyticsNotesCount');
   const panel=$('#analyticsNotesPanel');
   const toggle=$('#toggleAnalyticsNotes');
   const chevron=$('#analyticsNotesChevron');
   if(!panel||!toggle)return;
   if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
-  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-monthly-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-monthly-note">＋ Agregar nota</button>':'');
+  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input analytics-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-analytics-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-analytics-note">＋ Agregar nota</button>':'');
   toggle.setAttribute('aria-expanded',panel.classList.contains('hidden')?'false':'true');
   if(chevron)chevron.textContent=panel.classList.contains('hidden')?'⌄':'⌃';
 }
@@ -593,45 +604,35 @@ function toggleAnalyticsNotes(){
   renderAnalyticsNotes();
 }
 function handleAnalyticsNotesInput(e){
-  const input=e.target.closest('.monthly-note-input');
+  const input=e.target.closest('.analytics-note-input');
   if(!input)return;
   const index=Number(input.dataset.noteIndex);
-  const notes=monthlyNotesFor(currentMonth);
+  const notes=analyticsNotesFor(currentMonth);
   if(!Number.isInteger(index))return;
   notes[index]=String(input.value||'').slice(0,180);
   while(notes.length && !String(notes[notes.length-1]||'').trim()) notes.pop();
-  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  state.analyticsNotes[currentMonth]=notes.slice(0,3);
   save();
   const countEl=$('#analyticsNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
-  const homeCount=$('#monthlyNotesCount'); if(homeCount)homeCount.textContent=notes.length?`· ${notes.length}`:'';
 }
-function handleMonthlyNotesInput(e){
-  const input=e.target.closest('.monthly-note-input');
-  if(!input)return;
-  const index=Number(input.dataset.noteIndex);
-  const notes=monthlyNotesFor(currentMonth);
-  if(!Number.isInteger(index))return;
-  notes[index]=String(input.value||'').slice(0,180);
-  while(notes.length && !String(notes[notes.length-1]||'').trim()) notes.pop();
-  state.monthlyNotes[currentMonth]=notes.slice(0,3);
-  save();
-  const countEl=$('#monthlyNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
-  const analyticsCount=$('#analyticsNotesCount'); if(analyticsCount)analyticsCount.textContent=notes.length?`· ${notes.length}`:'';
-}
-function handleMonthlyNotesClick(e){
-  const btn=e.target.closest('[data-action="add-monthly-note"],[data-action="delete-monthly-note"]');
+function handleAnalyticsNotesClick(e){
+  const btn=e.target.closest('[data-action="add-analytics-note"],[data-action="delete-analytics-note"]');
   if(!btn)return;
-  const notes=monthlyNotesFor(currentMonth);
-  if(btn.dataset.action==='add-monthly-note'){ if(notes.length<3) notes.push(''); }
-  else { const index=Number(btn.dataset.index); if(Number.isInteger(index)) notes.splice(index,1); }
-  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  const notes=analyticsNotesFor(currentMonth);
+  if(btn.dataset.action==='add-analytics-note'){
+    if(notes.length<3) notes.push('');
+  }else{
+    const index=Number(btn.dataset.index);
+    if(Number.isInteger(index))notes.splice(index,1);
+  }
+  state.analyticsNotes[currentMonth]=notes.slice(0,3);
   save();
-  renderMonthlyNotes();
   renderAnalyticsNotes();
-  const homePanel=$('#monthlyNotesPanel');
-  if(homePanel&&!homePanel.classList.contains('hidden')){ const last=homePanel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
-  const analyticsPanel=$('#analyticsNotesPanel');
-  if(analyticsPanel&&!analyticsPanel.classList.contains('hidden')){ const last=analyticsPanel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
+  const panel=$('#analyticsNotesPanel');
+  if(panel&&!panel.classList.contains('hidden')){
+    const last=panel.querySelector('.analytics-note-input:last-of-type');
+    if(last)last.focus();
+  }
 }
 function updateVisibleMonthLabels(){
   const label=monthLabel(currentMonth);
@@ -1255,7 +1256,7 @@ function renderAnalytics(){
   }else if(selectedExpenseCategory==='total'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
     labelEl.textContent='Total de gastos del año';
-    $('#expenseChart').innerHTML=lineChart(monthShort,totalSeries.values,'Total gastos');
+    $('#expenseChart').innerHTML=barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }else{
     const selected=expSeries.find(s=>s.category===selectedExpenseCategory);
     const selectedTotal=selected ? selected.values.reduce((sum,v)=>sum+v,0) : annualExpenseTotal;
@@ -1263,7 +1264,7 @@ function renderAnalytics(){
     labelEl.textContent=selected ? `Gastos de ${selected.category} en el año` : 'Total de gastos del año';
     $('#expenseChart').innerHTML=selected
       ? lineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
-      : lineChart(monthShort,totalSeries.values,'Total gastos');
+      : barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }
   $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
     ? expSeries.map((s,i)=>{const total=s.values.reduce((sum,v)=>sum+v,0);const share=annualExpenseTotal?Math.round(total/annualExpenseTotal*100):0;return `<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)} · ${money(total)} (${share}%)</span>`;}).join('')||'<span>Sin gastos registrados en este año.</span>'
@@ -1282,8 +1283,11 @@ function renderExpenseSelector(expSeries){
 function renderWealthLegend(wealth){
   const first=wealth.find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;
   const last=[...wealth].reverse().find(x=>x.totalCopEquivalent>0)?.totalCopEquivalent||0;
-  const diff=last-first;const arrow=diff>0?'↗':diff<0?'↘':'→';
-  $('#wealthLegend').innerHTML=`<span><i class="legend-dot"></i>Patrimonio total</span><span class="trend ${diff<0?'down':''}">${arrow} ${money(Math.abs(diff))} ${diff>=0?'de crecimiento':'de disminución'} en el año</span>`;
+  let pct=null;
+  if(first>0) pct=((last-first)/first)*100;
+  const arrow=pct===null?'→':pct>0?'↗':pct<0?'↘':'→';
+  const trend=pct===null?'Sin base para calcular':`${Math.abs(pct).toFixed(1)}% ${pct>=0?'de crecimiento':'de disminución'} en el año`;
+  $('#wealthLegend').innerHTML=`<span><i class="legend-dot"></i>Patrimonio total</span><span class="trend ${pct!==null&&pct<0?'down':''}">${arrow} ${trend}</span>`;
 }
 function renderAssetSelector(){
   const select=$('#assetChartSelect');if(!select)return;
@@ -1344,6 +1348,21 @@ function lineChart(labels,values,title){
   const dots=values.map((v,i)=>`<circle cx="${g.x(i)}" cy="${g.y(v)}" r="10" class="chart-hit chart-hit-area" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></circle><circle cx="${g.x(i)}" cy="${g.y(v)}" r="5" class="chart-dot" pointer-events="none"/>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g><polyline points="${points}" class="chart-line"/>${dots}${xlabels}</svg></div>`;
 }
+function barChart(labels,values,title){
+  const W=760,H=300,g=chartGeometry(values,W,H);
+  const grid=[0,.25,.5,.75,1].map(t=>{const y=g.pad.t+g.h*(1-t);const val=g.min+g.range*t;return `<line x1="${g.pad.l}" y1="${y}" x2="${W-g.pad.r}" y2="${y}" class="chart-grid"/><text x="${g.pad.l-8}" y="${y+4}" text-anchor="end" class="chart-axis">${esc(fmtAxis(val))}</text>`;}).join('');
+  const step=g.w/(values.length||1), bw=Math.max(10,step*.56);
+  const zeroY=g.y(0);
+  const bars=values.map((v,i)=>{
+    const y=v>=0?g.y(v):zeroY;
+    const h=Math.max(1,Math.abs(g.y(v)-zeroY));
+    const x=g.pad.l+i*step+(step-bw)/2;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" class="chart-bar chart-hit" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></rect>`;
+  }).join('');
+  const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
+  return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g>${bars}${xlabels}</svg></div>`;
+}
+
 function pieChart(series){
   const rows=series.map(s=>({name:s.category,value:s.values.reduce((sum,v)=>sum+v,0)})).filter(x=>x.value>0);
   if(!rows.length)return '<div class="empty">Sin gastos registrados en este año.</div>';

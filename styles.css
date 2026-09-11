@@ -182,3 +182,10 @@ body.income-organizing .income-data-row{background:#faf9fc}
 /* V56 - referencia rápida de continuidad de carga desde D1 */
 .latest-expense-info{margin:2px 0 10px;padding:9px 12px;border-radius:10px;background:#f7f6fa;color:var(--muted);font-size:11px;font-weight:750;line-height:1.35;border:1px solid var(--line)}
 @media(max-width:430px){.latest-expense-info{font-size:10.5px;padding:8px 10px}}
+
+/* V65: Analisis independiente y mejora de graficos */
+.analytics-notes-card .monthly-note-input.analytics-note-input{background:#fbfafc}
+.chart-bar{fill:#c85454;opacity:.88;cursor:pointer}
+.chart-bar:hover{opacity:1}
+@media(min-width:681px){.analytics-expense-card .pie-chart-wrap{grid-template-columns:minmax(0,1.3fr) minmax(250px,.7fr)}.analytics-expense-card .pie-svg-wrap svg{transform:scale(1.07);transform-origin:center}}
+@media(max-width:680px){.analytics-expense-card .pie-svg-wrap{max-height:320px}.analytics-expense-card .pie-svg-wrap svg{transform:scale(1.05);transform-origin:center}}

@@ -1,3 +1,5 @@
+V72 — Ajuste de altura de gráficos en móvil: elimina el espacio vertical sobrante causado por min-height en los SVG, conservando interacción, notas y visualización de V71.
+
 V71 — Corrección robusta de Notas e interacción táctil de gráficos: notas en Inicio y Análisis mediante delegación de eventos; puntos de patrimonio/cuentas con área táctil ampliada y selección por toque; dona general de Gastos más grande y centrada en móvil; Gastos conserva dona/barras según selección y Ahorros/Inversiones conserva líneas.
 
 # Mi Presupuesto — V63

@@ -238,14 +238,17 @@ body.income-organizing .income-data-row{background:#faf9fc}
 }
 
 
-/* V71 - notas de Análisis por año y tipografía móvil de gráficos */
+/* V72 - compactar altura de gráficos en móvil sin cambiar su interacción */
 .analytics-notes-card .monthly-notes-panel{transition:none;}
 .chart-hit-area{fill:transparent!important;stroke:transparent!important;}
 @media(max-width:680px){
   .chart-axis{font-size:12px!important;}
   .chart-label{font-size:12px!important;}
   .chart-tooltip{font-size:12px;padding:8px 10px;}
-  .analytics-wealth-card .chart-wrap svg{min-height:300px;}
+  /* El viewBox ya define la altura proporcional. El min-height de V70/V71
+     estaba creando espacio vacío arriba y abajo en pantallas pequeñas. */
+  .chart-wrap svg{min-height:0!important;height:auto!important;}
+  .analytics-wealth-card .chart-wrap svg{min-height:0!important;height:auto!important;}
 }
 @media(max-width:430px){
   .chart-axis{font-size:11.5px!important;}

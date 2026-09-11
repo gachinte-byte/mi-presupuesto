@@ -7,6 +7,7 @@ const chartPalette = ['#4f4a68','#123f50','#c99a3d','#2e8b65','#c85454','#6a6388
 let state = null;
 let activeView = 'home';
 let currentMonth = '2026-09';
+let centralLatestExpenseDate = null;
 let analyticsYear = 2026;
 let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
@@ -270,6 +271,8 @@ async function syncCentralExpenseValues(month=currentMonth){
     const res=await fetch(`${apiUrl}/presupuesto/gastos?${qs}`,{headers:{'Accept':'application/json'},cache:'no-store'});
     const data=await res.json().catch(()=>null);
     if(!res.ok || !data?.ok) throw new Error(data?.error||`Respuesta HTTP ${res.status}`);
+    centralLatestExpenseDate = data?.ultima_fecha_gasto || null;
+    updateLatestExpenseInfo();
 
     const totalD1=Math.round(Number(data?.total)||0);
     let loaded=0, skipped=0, nonZero=0;
@@ -304,6 +307,8 @@ async function syncCentralExpenseValues(month=currentMonth){
 
     const movimientos=Number(data?.movimientos||0);
     const noClas=Number(data?.debug?.noClasificados||0);
+    centralLatestExpenseDate = data?.ultima_fecha_gasto || null;
+    updateLatestExpenseInfo();
     if(movimientos===0){
       alert(`D1 no tiene gastos confirmados en ${monthLabel(month)}.
 
@@ -526,6 +531,7 @@ function updateVisibleMonthLabels(){
 async function changeMonth(delta){
   const next=shiftMonth(currentMonth,delta);
   currentMonth=next;
+  centralLatestExpenseDate=null;
   analyticsYear=Number(currentMonth.slice(0,4));
   autoCarryJanuarySavings();
   save();
@@ -786,8 +792,25 @@ async function openAddIncome(){
   });
 }
 
+function updateLatestExpenseInfo(){
+  const el=document.getElementById('latestExpenseInfo');
+  if(!el) return;
+  if(!centralCatalogMode()){el.textContent='';el.style.display='none';return;}
+  if(!centralLatestExpenseDate){
+    el.textContent='📸 No hay gastos registrados en este mes';
+    el.style.display='';
+    return;
+  }
+  const parts=centralLatestExpenseDate.split('-').map(Number);
+  const d=new Date(parts[0],parts[1]-1,parts[2]);
+  const next=new Date(d); next.setDate(d.getDate()+1);
+  const fmt=x=>x.toLocaleDateString('es-CO',{day:'numeric',month:'short'}).replace(/\.$/,'');
+  el.textContent=`📸 Último gasto registrado: ${fmt(d)} · continuar desde ${fmt(next)}`;
+  el.style.display='';
+}
 function renderExpenses(){
   const central=centralCatalogMode();
+  updateLatestExpenseInfo();
   document.body.classList.toggle('expense-organizing', expenseOrganizeMode);
   const organizeBtn=$('#toggleExpenseOrganize');
   const addBtn=$('#addExpenseBtn');

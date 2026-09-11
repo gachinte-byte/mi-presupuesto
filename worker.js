@@ -442,6 +442,10 @@ export default {
           subcategorias,
           total:Math.round(items.reduce((sum,r)=>sum+Number(r.monto||0),0)),
           movimientos:new Set(items.map(r=>r.gasto_id).filter(Boolean)).size,
+          ultima_fecha_gasto: items.length ? items.reduce((max,r) => {
+            const f = String(r.fecha || '').slice(0,10);
+            return f > max ? f : max;
+          }, '') : null,
           debug:{registrosMes:items.length,subitemsClasificados:classified,categoryOnly,noClasificados:unmatched.length,conCategoriaId:items.filter(r=>r.categoria_id).length,conSubcategoriaId:items.filter(r=>r.subcategoria_id).length,unmatched}
         },{status:200,headers:cors});
       } catch (error) {

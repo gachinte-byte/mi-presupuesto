@@ -176,3 +176,8 @@ body.expense-organizing .central-expense-item .row-title strong,body.expense-org
 #view-savings .category-title{letter-spacing:-.01em}
 @media(max-width:430px){.income-data-row{padding:14px 11px}.income-category-label{font-size:8px}.income-category-edit{width:25px;height:25px}}
 body.income-organizing .income-data-row{background:#faf9fc}
+
+
+/* V56 - referencia rápida de continuidad de carga desde D1 */
+.latest-expense-info{margin:2px 0 10px;padding:9px 12px;border-radius:10px;background:#f7f6fa;color:var(--muted);font-size:11px;font-weight:750;line-height:1.35;border:1px solid var(--line)}
+@media(max-width:430px){.latest-expense-info{font-size:10.5px;padding:8px 10px}}

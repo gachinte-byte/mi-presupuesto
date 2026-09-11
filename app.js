@@ -1240,12 +1240,12 @@ function renderAnalytics(){
   const expSeries=annualExpenseCategories(analyticsYear);
   const annualExpenseTotal=yearMonths(analyticsYear).reduce((sum,m)=>sum+(centralCatalogMode()?centralExpenseTotal(m):state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0)),0);
   $('#chartWealthCurrent').textContent=money(current?.totalCopEquivalent||0);
-  $('#wealthChart').innerHTML=barLineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
+  $('#wealthChart').innerHTML=lineChart(monthShort,wealth.map(x=>x.totalCopEquivalent),'Patrimonio total');
   renderWealthLegend(wealth);
   renderAssetSelector();
   const asset=state.assetItems.find(x=>x.id===selectedAssetChart);
   $('#assetChart').innerHTML=asset
-    ? barLineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`)
+    ? lineChart(monthShort,yearMonths(analyticsYear).map(m=>assetValueForChart(asset,m)*(asset.currency==='USD'?Number(state.settings.usdToCop||4000):1)),`${asset.name} en COP`)
     : '<div class="empty chart-note">Selecciona una cuenta para ver su evolución mensual.</div>';
 
   renderExpenseSelector(expSeries);
@@ -1254,19 +1254,19 @@ function renderAnalytics(){
   if(selectedExpenseCategory==='all'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
     labelEl.textContent='Total de gastos del año';
-    $('#expenseChart').innerHTML=barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
+    $('#expenseChart').innerHTML=pieChart(expSeries);
   }else if(selectedExpenseCategory==='total'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
     labelEl.textContent='Total de gastos del año';
-    $('#expenseChart').innerHTML=barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
+    $('#expenseChart').innerHTML=barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }else{
     const selected=expSeries.find(s=>s.category===selectedExpenseCategory);
     const selectedTotal=selected ? selected.values.reduce((sum,v)=>sum+v,0) : annualExpenseTotal;
     $('#chartExpensesYear').textContent=money(selectedTotal);
     labelEl.textContent=selected ? `Gastos de ${selected.category} en el año` : 'Total de gastos del año';
     $('#expenseChart').innerHTML=selected
-      ? barLineChart(monthShort,selected.values,`Gastos de ${selected.category}`)
-      : barLineChart(monthShort,totalSeries.values,'Evolución del total de gastos');
+      ? barChart(monthShort,selected.values,`Gastos de ${selected.category}`)
+      : barChart(monthShort,totalSeries.values,'Evolución del total de gastos');
   }
   $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
     ? expSeries.map((s,i)=>{const total=s.values.reduce((sum,v)=>sum+v,0);const share=annualExpenseTotal?Math.round(total/annualExpenseTotal*100):0;return `<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)} · ${money(total)} (${share}%)</span>`;}).join('')||'<span>Sin gastos registrados en este año.</span>'

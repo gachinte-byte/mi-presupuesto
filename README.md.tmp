@@ -1,0 +1,8 @@
+V68 — Corrección de Análisis y Gráficos.
+
+- Se conserva la dona general de Gastos al seleccionar “Todas las categorías”.
+- Las vistas “Total gastos” y categoría individual usan barras con valor interactivo.
+- Se elimina la línea de conexión sobre las barras de Gastos.
+- Se restaura la visualización previa de Patrimonio total y evolución de cuenta/inversión (líneas).
+- No se modifican D1 ni el Worker.
+- Las notas de Análisis permanecen independientes de las notas de Inicio.

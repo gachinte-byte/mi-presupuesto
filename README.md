@@ -1,4 +1,4 @@
-V67 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
+V68 — Análisis y Gráficos: dona general de Gastos conservada; Total gastos y categorías en barras interactivas sin línea; gráficos de patrimonio/cuenta mantienen su visualización previa.
 
 # Mi Presupuesto — V63
 

@@ -1,4 +1,4 @@
-# Mi Presupuesto — V62
+# Mi Presupuesto — V63
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
@@ -107,30 +107,33 @@ Ingresos:
 - Se diferencia mes vacío en D1 de error de conexión: los errores no modifican los valores locales.
 
 
-## V62 — mes visible en totales
+## V63 — mes visible en totales
 - Los totales inferiores de Gastos e Ingresos muestran dinámicamente el mes actual: “Gastos · Septiembre 2026” e “Ingresos · Septiembre 2026”.
 - Se actualizan automáticamente al cambiar de mes y no agregan elementos adicionales a la interfaz.
 
 
-## V62
+## V63
 Corrección: los títulos dinámicos de Gastos e Ingresos ahora se actualizan explícitamente cada vez que cambia el mes, incluyendo después de la sincronización D1.
 
 
-### V62
+### V63
 - El título inferior de Ahorros e inversiones ahora muestra dinámicamente el mes actual.
 - No muestra valores en ese título; los totales COP y USD permanecen en el resumen inferior.
 - El mes se actualiza junto con el selector superior, igual que Gastos e Ingresos.
 
 
-## V62
+## V63
 - Gastos: indicador informativo obtenido de D1 con la última fecha de gasto del mes seleccionado y la fecha sugerida para continuar la carga.
 - Worker `/presupuesto/gastos`: agrega `ultima_fecha_gasto` sin cambiar los valores ni la lógica de clasificación.
 
 
-## V62
+## V63
 Conecta el indicador informativo de última fecha de gasto con `ultima_fecha_gasto` entregado por el endpoint `/presupuesto/gastos` del Worker V57. No modifica datos ni la lógica de D1.
 
 
-### V62
+### V63
 - Agrega Notas del mes en Inicio: hasta 3 notas breves por mes, guardadas exclusivamente en localStorage.
 - Las notas se pueden expandir/ocultar, editar y eliminar; no se envían a D1.
+
+
+V63: Configuración simplificada. La conexión con Gastos IA usa por defecto el Worker oficial `https://gastos-ia.gachinte.workers.dev`; la URL ya no se edita desde la interfaz. La clave de escritura D1 queda dentro de Configuración avanzada.

@@ -1,3 +1,4 @@
+const DEFAULT_GASTOS_IA_WORKER = 'https://gastos-ia.gachinte.workers.dev';
 const STORAGE_KEY = 'miPresupuesto.v2';
 const DATA_URL = 'data.json';
 
@@ -62,7 +63,7 @@ function normalize(data) {
   data.expenseItems ||= [];
   data.assetItems ||= [];
   data.settings ||= { usdToCop: 4000 };
-  data.settings.catalogApiUrl ||= '';
+  data.settings.catalogApiUrl ||= DEFAULT_GASTOS_IA_WORKER;
   data.settings.presupuestoWriteKey ||= '';
   data.phase3SavingsCatalog ||= null;
   data.phase3IncomeCatalog ||= null;
@@ -240,7 +241,7 @@ function centralExpenseTotal(month=currentMonth){ return centralExpenseRows(mont
 function centralCategoryTotals(month=currentMonth){ const map={}; centralExpenseRows(month).forEach(x=>{map[x.category]=(map[x.category]||0)+x.value;}); return Object.entries(map).filter(([,v])=>v!==0).sort((a,b)=>b[1]-a[1]); }
 async function syncCentralExpenseValues(month=currentMonth){
   if(!centralCatalogMode()){toast('Primero conecta el catálogo D1.');return;}
-  const apiUrl=String(state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
+  const apiUrl=DEFAULT_GASTOS_IA_WORKER;
   if(!apiUrl){toast('Falta la URL del Worker.');return;}
 
   // Si el mes tiene valores editados manualmente, pedir confirmación antes
@@ -336,9 +337,7 @@ function catalogComparison(){
   return {connected:true,localCategories:local.length,centralCategories:c.categorias.length,matched,missingLocal:local.filter(x=>!centralNames.has(normalizedText(x)))};
 }
 async function syncCentralCatalog(){
-  const input=$('#catalogApiUrl');
-  const apiUrl=String(input?.value||state.settings.catalogApiUrl||'').trim().replace(/\/$/,'');
-  if(!apiUrl){alert('Primero escribe la URL pública de tu Worker de Gastos IA.');return;}
+  const apiUrl=DEFAULT_GASTOS_IA_WORKER;
   try{
     const res=await fetch(`${apiUrl}/presupuesto/catalogo`,{method:'GET',headers:{'Accept':'application/json'},cache:'no-store'});
     const data=await res.json().catch(()=>null);
@@ -1473,15 +1472,15 @@ async function importExcel(file){
 }
 
 function openSettings(){
-  const apiUrl=state.settings.catalogApiUrl||'';
   const chatId=state.settings.catalogChatId||'';
   $('#modal').innerHTML=`<h3>Configuración</h3><div class="settings-list">
-  <div class="settings-block"><strong>☁️ Conexión de gastos</strong><div class="form-field"><label>Worker de Gastos IA</label><input id="catalogApiUrl" class="input" type="url" value="${escAttr(apiUrl)}" placeholder="https://tu-worker.workers.dev"></div>
+  <div class="settings-block"><strong>☁️ Conexión con Gastos IA</strong><p class="helper">Worker conectado: <strong>gastos-ia.gachinte.workers.dev</strong></p>
   <button class="primary-btn" onclick="syncCentralCatalog()">↻ Actualizar conexión</button>
   ${renderCatalogSettings()}
+  <details class="settings-advanced"><summary>Configuración avanzada</summary>
   <div class="form-field"><label>Clave de escritura D1</label><input id="presupuestoWriteKey" class="input" type="password" value="${escAttr(state.settings.presupuestoWriteKey||'')}" placeholder="PRESUPUESTO_WRITE_KEY"><p class="helper">Se guarda solo en este dispositivo y se usa para guardar Ahorros e Ingresos en D1. No la publiques en GitHub.</p></div>
   <button class="secondary-btn" onclick="savePresupuestoWriteKey()">Guardar clave de escritura</button>
-  <details class="settings-advanced"><summary>Configuración avanzada</summary><div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
+  <div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
   </div>
   <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes para revisarlo o modificar sus valores.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
   <div class="settings-block"><strong>💾 Copia de seguridad</strong><button onclick="exportJSON()">Exportar datos a JSON</button><button onclick="document.getElementById('importFile').click()">📥 Importar JSON en este dispositivo</button><button onclick="resetLocal()" class="danger">♻️ Restaurar datos iniciales</button></div></div>

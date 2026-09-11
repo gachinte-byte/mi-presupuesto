@@ -675,7 +675,7 @@ function openMoveAsset(itemId){
 }
 
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
-function renderMonthLabels(){$('#currentMonthLabel').textContent=monthLabel(currentMonth);$('#expenseMonthLabel').textContent=monthLabel(currentMonth);$('#savingsMonthLabel').textContent=monthLabel(currentMonth);$('#incomeMonthLabel').textContent=monthLabel(currentMonth);}
+function renderMonthLabels(){const label=monthLabel(currentMonth);$('#currentMonthLabel').textContent=label;$('#expenseMonthLabel').textContent=label;$('#savingsMonthLabel').textContent=label;$('#incomeMonthLabel').textContent=label;const expenseTitle=$('#expensesViewTitle');if(expenseTitle)expenseTitle.textContent=`Gastos · ${label}`;const incomeTitle=$('#incomeViewTitle');if(incomeTitle)incomeTitle.textContent=`Ingresos · ${label}`;}
 function renderHome(){
   const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);

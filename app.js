@@ -76,6 +76,10 @@ function normalize(data) {
   data.centralSubcategoryNames ||= {};
   data.settings.catalogChatId ||= '';
   data.incomeOrganizeMode = data.incomeOrganizeMode === true;
+  data.monthlyNotes ||= {};
+  for (const [month, notes] of Object.entries(data.monthlyNotes)) {
+    data.monthlyNotes[month] = Array.isArray(notes) ? notes.map(x=>String(x ?? '').trim()).filter(Boolean).slice(0,3) : [];
+  }
 
   // Orden personalizado SOLO para la sección de Gastos.
   // Si el usuario ya tenía datos guardados, se conserva el orden actual y
@@ -529,6 +533,8 @@ function bindEvents() {
   $('#nextYear').onclick=()=>{analyticsYear++;renderAnalytics();};
   $('#assetChartSelect').onchange=(e)=>{selectedAssetChart=e.target.value;renderAnalytics();};
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
+  $('#toggleMonthlyNotes').onclick=toggleMonthlyNotes;
+  $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
@@ -540,8 +546,57 @@ function bindEvents() {
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
   document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
+  $('#monthlyNotesPanel').addEventListener('click',handleMonthlyNotesClick);
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
+
+function monthlyNotesFor(month=currentMonth){
+  state.monthlyNotes ||= {};
+  if(!Array.isArray(state.monthlyNotes[month])) state.monthlyNotes[month]=[];
+  return state.monthlyNotes[month];
+}
+function renderMonthlyNotes(){
+  const notes=monthlyNotesFor(currentMonth);
+  const countEl=$('#monthlyNotesCount');
+  const panel=$('#monthlyNotesPanel');
+  const toggle=$('#toggleMonthlyNotes');
+  const chevron=$('#monthlyNotesChevron');
+  if(!panel||!toggle)return;
+  if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
+  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-monthly-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-monthly-note">＋ Agregar nota</button>':'');
+  toggle.setAttribute('aria-expanded',panel.classList.contains('hidden')?'false':'true');
+  if(chevron)chevron.textContent=panel.classList.contains('hidden')?'⌄':'⌃';
+}
+function toggleMonthlyNotes(){
+  const panel=$('#monthlyNotesPanel');
+  if(!panel)return;
+  panel.classList.toggle('hidden');
+  renderMonthlyNotes();
+}
+function handleMonthlyNotesInput(e){
+  const input=e.target.closest('.monthly-note-input');
+  if(!input)return;
+  const index=Number(input.dataset.noteIndex);
+  const notes=monthlyNotesFor(currentMonth);
+  if(!Number.isInteger(index))return;
+  notes[index]=String(input.value||'').slice(0,180);
+  while(notes.length && !String(notes[notes.length-1]||'').trim()) notes.pop();
+  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  save();
+  const countEl=$('#monthlyNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
+}
+function handleMonthlyNotesClick(e){
+  const btn=e.target.closest('[data-action="add-monthly-note"],[data-action="delete-monthly-note"]');
+  if(!btn)return;
+  const notes=monthlyNotesFor(currentMonth);
+  if(btn.dataset.action==='add-monthly-note'){ if(notes.length<3) notes.push(''); }
+  else { const index=Number(btn.dataset.index); if(Number.isInteger(index)) notes.splice(index,1); }
+  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  save();
+  renderMonthlyNotes();
+  const panel=$('#monthlyNotesPanel');
+  if(panel&&!panel.classList.contains('hidden')){ const last=panel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
+}
 function updateVisibleMonthLabels(){
   const label=monthLabel(currentMonth);
   const ids={
@@ -732,6 +787,7 @@ function openMoveAsset(itemId){
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
 function renderMonthLabels(){updateVisibleMonthLabels();}
 function renderHome(){
+  renderMonthlyNotes();
   const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);
   $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';

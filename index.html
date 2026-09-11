@@ -31,6 +31,12 @@
         <article class="metric-card expense-card"><span>💸 Gastos</span><strong id="summaryExpenses">$0</strong></article>
         <article class="metric-card extra-card"><span id="extraLabel">🟢 Extra disponible</span><strong id="summaryExtra">$0</strong><small>Ingresos − gastos</small></article>
       </div>
+      <section class="section-card monthly-notes-card">
+        <button id="toggleMonthlyNotes" class="monthly-notes-toggle" type="button" aria-expanded="false">
+          <span><span class="monthly-notes-icon">📝</span> Notas del mes <small id="monthlyNotesCount"></small></span><span id="monthlyNotesChevron">⌄</span>
+        </button>
+        <div id="monthlyNotesPanel" class="monthly-notes-panel hidden"></div>
+      </section>
       <section class="section-card"><div class="section-heading"><div><span class="eyebrow">INGRESOS</span><h2>Este mes</h2></div><button class="text-btn" data-go="income">Editar</button></div><div id="homeIncomeList" class="mini-list"></div><div class="total-line"><span>Ingreso total</span><strong id="homeIncomeTotal">$0</strong></div></section>
       <section class="section-card"><div class="section-heading"><div><span class="eyebrow">GASTOS</span><h2>Por categoría</h2></div><button class="text-btn" data-go="expenses">Ver gastos</button></div><div id="homeExpenseList" class="category-list"></div><div class="total-line"><span>Gastos totales</span><strong id="homeExpenseTotal">$0</strong></div></section>
       <section class="section-card investments-preview"><div class="section-heading"><div><span class="eyebrow">MI DINERO</span><h2>Ahorros e inversiones</h2></div><button class="text-btn" data-go="savings">Ver saldos</button></div><div class="wealth-total" id="homeWealthTotal">$0 COP</div><div id="homeSavingsList" class="mini-list"></div></section>

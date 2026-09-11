@@ -189,3 +189,11 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .chart-bar:hover{opacity:1}
 @media(min-width:681px){.analytics-expense-card .pie-chart-wrap{grid-template-columns:minmax(0,1.3fr) minmax(250px,.7fr)}.analytics-expense-card .pie-svg-wrap svg{transform:scale(1.07);transform-origin:center}}
 @media(max-width:680px){.analytics-expense-card .pie-svg-wrap{max-height:320px}.analytics-expense-card .pie-svg-wrap svg{transform:scale(1.05);transform-origin:center}}
+
+/* V66 - notas de Analisis robustas y valores visibles en barras */
+.analytics-notes-card .monthly-notes-panel[hidden]{display:none!important}
+.analytics-notes-card .monthly-notes-toggle{touch-action:manipulation;user-select:none}
+.chart-bar-group{cursor:pointer;outline:none}
+.chart-bar-value-label{opacity:0;pointer-events:none;font-size:11px;font-weight:850;fill:var(--ink);transition:opacity .12s ease}
+.chart-bar-group:hover .chart-bar-value-label,.chart-bar-group:focus .chart-bar-value-label{opacity:1}
+@media(max-width:680px){.chart-bar-value-label{font-size:9px}}

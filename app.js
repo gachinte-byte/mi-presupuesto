@@ -13,6 +13,7 @@ let latestExpenseDateRequestId = 0;
 let analyticsYear = 2026;
 let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
+let analyticsNotesOpen = false;
 let expenseOrganizeMode = false;
 let savingsOrganizeMode = false;
 let incomeOrganizeMode = false;
@@ -594,13 +595,14 @@ function renderAnalyticsNotes(){
   if(!panel||!toggle)return;
   if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
   panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input analytics-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-analytics-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-analytics-note">＋ Agregar nota</button>':'');
-  toggle.setAttribute('aria-expanded',panel.classList.contains('hidden')?'false':'true');
-  if(chevron)chevron.textContent=panel.classList.contains('hidden')?'⌄':'⌃';
+  panel.classList.toggle('hidden',!analyticsNotesOpen);
+  panel.hidden=!analyticsNotesOpen;
+  toggle.setAttribute('aria-expanded',analyticsNotesOpen?'true':'false');
+  if(chevron)chevron.textContent=analyticsNotesOpen?'⌃':'⌄';
 }
-function toggleAnalyticsNotes(){
-  const panel=$('#analyticsNotesPanel');
-  if(!panel)return;
-  panel.classList.toggle('hidden');
+function toggleAnalyticsNotes(e){
+  if(e)e.preventDefault();
+  analyticsNotesOpen=!analyticsNotesOpen;
   renderAnalyticsNotes();
 }
 function handleAnalyticsNotesInput(e){
@@ -1357,7 +1359,9 @@ function barChart(labels,values,title){
     const y=v>=0?g.y(v):zeroY;
     const h=Math.max(1,Math.abs(g.y(v)-zeroY));
     const x=g.pad.l+i*step+(step-bw)/2;
-    return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" class="chart-bar chart-hit" data-label="${escAttr(labels[i])}" data-value="${escAttr(money(v))}"><title>${esc(labels[i])}: ${esc(money(v))}</title></rect>`;
+    const valueLabel=money(v);
+    const labelY=v>=0?Math.max(14,y-7):Math.min(H-50,y+h+16);
+    return `<g class="chart-bar-group chart-hit" data-label="${escAttr(labels[i])}" data-value="${escAttr(valueLabel)}" tabindex="0" role="img" aria-label="${escAttr(labels[i]+' '+valueLabel)}"><rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" class="chart-bar"></rect><text x="${x+bw/2}" y="${labelY}" text-anchor="middle" class="chart-bar-value-label">${esc(valueLabel)}</text><title>${esc(labels[i])}: ${esc(valueLabel)}</title></g>`;
   }).join('');
   const xlabels=labels.map((l,i)=>`<text x="${g.x(i)}" y="${H-14}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
   return `<div class="chart-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}"><g>${grid}</g>${bars}${xlabels}</svg></div>`;

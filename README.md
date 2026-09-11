@@ -1,4 +1,4 @@
-# Mi Presupuesto — V59
+# Mi Presupuesto — V60
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
@@ -107,25 +107,25 @@ Ingresos:
 - Se diferencia mes vacío en D1 de error de conexión: los errores no modifican los valores locales.
 
 
-## V59 — mes visible en totales
+## V60 — mes visible en totales
 - Los totales inferiores de Gastos e Ingresos muestran dinámicamente el mes actual: “Gastos · Septiembre 2026” e “Ingresos · Septiembre 2026”.
 - Se actualizan automáticamente al cambiar de mes y no agregan elementos adicionales a la interfaz.
 
 
-## V59
+## V60
 Corrección: los títulos dinámicos de Gastos e Ingresos ahora se actualizan explícitamente cada vez que cambia el mes, incluyendo después de la sincronización D1.
 
 
-### V59
+### V60
 - El título inferior de Ahorros e inversiones ahora muestra dinámicamente el mes actual.
 - No muestra valores en ese título; los totales COP y USD permanecen en el resumen inferior.
 - El mes se actualiza junto con el selector superior, igual que Gastos e Ingresos.
 
 
-## V59
+## V60
 - Gastos: indicador informativo obtenido de D1 con la última fecha de gasto del mes seleccionado y la fecha sugerida para continuar la carga.
 - Worker `/presupuesto/gastos`: agrega `ultima_fecha_gasto` sin cambiar los valores ni la lógica de clasificación.
 
 
-## V59
+## V60
 Conecta el indicador informativo de última fecha de gasto con `ultima_fecha_gasto` entregado por el endpoint `/presupuesto/gastos` del Worker V57. No modifica datos ni la lógica de D1.

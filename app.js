@@ -8,6 +8,7 @@ let state = null;
 let activeView = 'home';
 let currentMonth = '2026-09';
 let centralLatestExpenseDate = null;
+let latestExpenseDateRequestId = 0;
 let analyticsYear = 2026;
 let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
@@ -387,15 +388,22 @@ async function writePhase3Resource(path, method, body=null){
 async function syncLatestExpenseDate(month=currentMonth){
   const apiUrl=String(state?.settings?.catalogApiUrl||'').trim().replace(/\/$/,'');
   if(!apiUrl) return;
+  const requestId=++latestExpenseDateRequestId;
   try{
     const res=await fetch(`${apiUrl}/presupuesto/gastos?mes=${encodeURIComponent(month)}`,{headers:{'Accept':'application/json'},cache:'no-store'});
     const data=await res.json().catch(()=>null);
     if(!res.ok || !data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+    // Solo aceptamos la respuesta si sigue correspondiendo al mes solicitado.
+    // Esto evita que una consulta anterior termine después de cambiar de mes
+    // y sobrescriba el indicador actual.
+    if(requestId!==latestExpenseDateRequestId || month!==currentMonth) return;
     centralLatestExpenseDate=data?.ultima_fecha_gasto||null;
     updateLatestExpenseInfo();
   }catch(err){
     console.warn('No se pudo consultar la última fecha de gastos:',err);
-    centralLatestExpenseDate=null;
+    // Un error de red/API no significa que el mes esté vacío. No borramos
+    // una fecha válida que ya tengamos.
+    if(requestId!==latestExpenseDateRequestId || month!==currentMonth) return;
     updateLatestExpenseInfo();
   }
 }
@@ -550,14 +558,19 @@ function updateVisibleMonthLabels(){
 async function changeMonth(delta){
   const next=shiftMonth(currentMonth,delta);
   currentMonth=next;
+  const monthForRequest=currentMonth;
   centralLatestExpenseDate=null;
+  updateLatestExpenseInfo();
   analyticsYear=Number(currentMonth.slice(0,4));
   autoCarryJanuarySavings();
   save();
   updateVisibleMonthLabels();
   render();
   updateVisibleMonthLabels();
-  await syncPhase3ReadOnly(currentMonth);
+  await syncPhase3ReadOnly(monthForRequest);
+  // La consulta de la última fecha es independiente de Ahorros/Ingresos.
+  // Se lanza siempre al cambiar de mes y se protege contra respuestas tardías.
+  await syncLatestExpenseDate(monthForRequest);
   render();
   updateVisibleMonthLabels();
 }

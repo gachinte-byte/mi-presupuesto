@@ -1,3 +1,5 @@
+V64 — Análisis y Gráficos: título actualizado, tarjeta de Gastos diferenciada, notas mensuales desplegables en Análisis y corrección del gráfico de Total gastos usando D1.
+
 # Mi Presupuesto — V63
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)

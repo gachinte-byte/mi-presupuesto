@@ -69,20 +69,26 @@
     </section>
 
     <section id="view-analytics" class="view">
-      <div class="page-title-row"><div><span class="eyebrow">ÚLTIMO MENÚ</span><h2>Análisis</h2><p>Consulta la evolución de tu patrimonio y de tus gastos de enero a diciembre.</p></div></div>
+      <div class="page-title-row"><div><h2>Análisis y Gráficos</h2><p>Consulta la evolución de tu patrimonio y de tus gastos de enero a diciembre.</p></div></div>
       <div class="year-control card"><button id="prevYear" class="month-arrow" aria-label="Año anterior">‹</button><div class="month-center"><span class="label">AÑO</span><strong id="analyticsYearLabel">2026</strong></div><button id="nextYear" class="month-arrow" aria-label="Año siguiente">›</button></div>
 
-      <section class="chart-card">
-        <div class="section-heading"><div><span class="eyebrow">PATRIMONIO</span><h3>Evolución de ahorros e inversiones</h3></div></div>
+      <section class="chart-card analytics-wealth-card">
+        <div class="section-heading"><div><span class="eyebrow">AHORROS E INVERSIONES</span><h3>Evolución de ahorros e inversiones</h3></div></div>
         <div class="chart-highlight"><span>Patrimonio al cierre del mes</span><strong id="chartWealthCurrent">$0</strong></div>
         <div id="wealthChart" class="chart-wrap" aria-label="Gráfico de patrimonio"></div>
         <div class="chart-legend" id="wealthLegend"></div>
         <div class="form-field chart-select-field"><label>Ver evolución de una cuenta</label><select id="assetChartSelect" class="select"></select></div>
         <div id="assetChart" class="chart-wrap small-chart" aria-label="Gráfico de cuenta"></div>
+        <section class="section-card monthly-notes-card analytics-notes-card">
+          <button id="toggleAnalyticsNotes" class="monthly-notes-toggle" type="button" aria-expanded="false">
+            <span><span class="monthly-notes-icon">📝</span> Notas del mes <small id="analyticsNotesCount"></small></span><span id="analyticsNotesChevron">⌄</span>
+          </button>
+          <div id="analyticsNotesPanel" class="monthly-notes-panel hidden"></div>
+        </section>
       </section>
 
-      <section class="chart-card">
-        <div class="section-heading"><div><span class="eyebrow">GASTOS</span><h3>Gastos por categoría</h3></div></div>
+      <section class="chart-card analytics-expense-card">
+        <div class="section-heading"><div><span class="eyebrow">💸 GASTOS</span><h3>Gastos por categoría</h3></div></div>
         <div class="chart-highlight"><span id="chartExpensesYearLabel">Total de gastos del año</span><strong id="chartExpensesYear">$0</strong></div>
         <div id="expenseChart" class="chart-wrap" aria-label="Gráfico de gastos por categoría"></div>
         <div class="form-field chart-select-field"><label>Ver categoría</label><select id="analyticsExpenseCategorySelect" class="select"></select></div>

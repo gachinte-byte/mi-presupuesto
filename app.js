@@ -534,6 +534,8 @@ function bindEvents() {
   $('#analyticsExpenseCategorySelect').onchange=(e)=>{selectedExpenseCategory=e.target.value;renderAnalytics();};
   $('#toggleMonthlyNotes').onclick=toggleMonthlyNotes;
   $('#monthlyNotesPanel').addEventListener('input',handleMonthlyNotesInput);
+  $('#toggleAnalyticsNotes').onclick=toggleAnalyticsNotes;
+  $('#analyticsNotesPanel').addEventListener('input',handleAnalyticsNotesInput);
   document.addEventListener('pointerover',handleChartPointer);
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
@@ -572,6 +574,37 @@ function toggleMonthlyNotes(){
   panel.classList.toggle('hidden');
   renderMonthlyNotes();
 }
+function renderAnalyticsNotes(){
+  const notes=monthlyNotesFor(currentMonth);
+  const countEl=$('#analyticsNotesCount');
+  const panel=$('#analyticsNotesPanel');
+  const toggle=$('#toggleAnalyticsNotes');
+  const chevron=$('#analyticsNotesChevron');
+  if(!panel||!toggle)return;
+  if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
+  panel.innerHTML=notes.map((note,i)=>`<div class="monthly-note-row"><textarea class="monthly-note-input" data-note-index="${i}" maxlength="180" rows="2" placeholder="Escribe una nota corta...">${esc(note)}</textarea><button type="button" class="monthly-note-delete" data-action="delete-monthly-note" data-index="${i}" aria-label="Eliminar nota">×</button></div>`).join('') + (notes.length<3?'<button type="button" class="monthly-note-add" data-action="add-monthly-note">＋ Agregar nota</button>':'');
+  toggle.setAttribute('aria-expanded',panel.classList.contains('hidden')?'false':'true');
+  if(chevron)chevron.textContent=panel.classList.contains('hidden')?'⌄':'⌃';
+}
+function toggleAnalyticsNotes(){
+  const panel=$('#analyticsNotesPanel');
+  if(!panel)return;
+  panel.classList.toggle('hidden');
+  renderAnalyticsNotes();
+}
+function handleAnalyticsNotesInput(e){
+  const input=e.target.closest('.monthly-note-input');
+  if(!input)return;
+  const index=Number(input.dataset.noteIndex);
+  const notes=monthlyNotesFor(currentMonth);
+  if(!Number.isInteger(index))return;
+  notes[index]=String(input.value||'').slice(0,180);
+  while(notes.length && !String(notes[notes.length-1]||'').trim()) notes.pop();
+  state.monthlyNotes[currentMonth]=notes.slice(0,3);
+  save();
+  const countEl=$('#analyticsNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
+  const homeCount=$('#monthlyNotesCount'); if(homeCount)homeCount.textContent=notes.length?`· ${notes.length}`:'';
+}
 function handleMonthlyNotesInput(e){
   const input=e.target.closest('.monthly-note-input');
   if(!input)return;
@@ -583,6 +616,7 @@ function handleMonthlyNotesInput(e){
   state.monthlyNotes[currentMonth]=notes.slice(0,3);
   save();
   const countEl=$('#monthlyNotesCount'); if(countEl)countEl.textContent=notes.length?`· ${notes.length}`:'';
+  const analyticsCount=$('#analyticsNotesCount'); if(analyticsCount)analyticsCount.textContent=notes.length?`· ${notes.length}`:'';
 }
 function handleMonthlyNotesClick(e){
   const btn=e.target.closest('[data-action="add-monthly-note"],[data-action="delete-monthly-note"]');
@@ -593,8 +627,11 @@ function handleMonthlyNotesClick(e){
   state.monthlyNotes[currentMonth]=notes.slice(0,3);
   save();
   renderMonthlyNotes();
-  const panel=$('#monthlyNotesPanel');
-  if(panel&&!panel.classList.contains('hidden')){ const last=panel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
+  renderAnalyticsNotes();
+  const homePanel=$('#monthlyNotesPanel');
+  if(homePanel&&!homePanel.classList.contains('hidden')){ const last=homePanel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
+  const analyticsPanel=$('#analyticsNotesPanel');
+  if(analyticsPanel&&!analyticsPanel.classList.contains('hidden')){ const last=analyticsPanel.querySelector('.monthly-note-input:last-of-type'); if(last)last.focus(); }
 }
 function updateVisibleMonthLabels(){
   const label=monthLabel(currentMonth);
@@ -1209,7 +1246,7 @@ function renderAnalytics(){
     : '<div class="empty chart-note">Selecciona una cuenta para ver su evolución mensual.</div>';
 
   renderExpenseSelector(expSeries);
-  const totalSeries={category:'Total gastos',values:yearMonths(analyticsYear).map(m=>state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0))};
+  const totalSeries={category:'Total gastos',values:yearMonths(analyticsYear).map(m=>centralCatalogMode()?centralExpenseTotal(m):state.expenseItems.reduce((s,x)=>s+getMonthValue(x,m),0))};
   const labelEl=$('#chartExpensesYearLabel');
   if(selectedExpenseCategory==='all'){
     $('#chartExpensesYear').textContent=money(annualExpenseTotal);
@@ -1231,6 +1268,7 @@ function renderAnalytics(){
   $('#expenseLegend').innerHTML=selectedExpenseCategory==='all'
     ? expSeries.map((s,i)=>{const total=s.values.reduce((sum,v)=>sum+v,0);const share=annualExpenseTotal?Math.round(total/annualExpenseTotal*100):0;return `<span><i style="background:${chartPalette[i%chartPalette.length]}"></i>${esc(s.category)} · ${money(total)} (${share}%)</span>`;}).join('')||'<span>Sin gastos registrados en este año.</span>'
     : `<span><i class="legend-dot"></i>${esc(selectedExpenseCategory==='total'?'Total gastos':selectedExpenseCategory)}</span>`;
+  renderAnalyticsNotes();
 }
 function renderExpenseSelector(expSeries){
   const select=$('#analyticsExpenseCategorySelect');

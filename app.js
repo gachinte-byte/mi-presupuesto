@@ -510,14 +510,30 @@ function bindEvents() {
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
+function updateVisibleMonthLabels(){
+  const label=monthLabel(currentMonth);
+  const ids={
+    currentMonthLabel:label,
+    expenseMonthLabel:label,
+    savingsMonthLabel:label,
+    incomeMonthLabel:label,
+    expensesViewTitle:`Gastos · ${label}`,
+    incomeViewTitle:`Ingresos · ${label}`
+  };
+  Object.entries(ids).forEach(([id,text])=>{const el=document.getElementById(id);if(el)el.textContent=text;});
+}
 async function changeMonth(delta){
   const next=shiftMonth(currentMonth,delta);
   currentMonth=next;
   analyticsYear=Number(currentMonth.slice(0,4));
   autoCarryJanuarySavings();
-  save(); render();
+  save();
+  updateVisibleMonthLabels();
+  render();
+  updateVisibleMonthLabels();
   await syncPhase3ReadOnly(currentMonth);
   render();
+  updateVisibleMonthLabels();
 }
 function autoCarryJanuarySavings(){
   if(!state || !currentMonth.endsWith('-01')) return;
@@ -675,7 +691,7 @@ function openMoveAsset(itemId){
 }
 
 function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
-function renderMonthLabels(){const label=monthLabel(currentMonth);$('#currentMonthLabel').textContent=label;$('#expenseMonthLabel').textContent=label;$('#savingsMonthLabel').textContent=label;$('#incomeMonthLabel').textContent=label;const expenseTitle=$('#expensesViewTitle');if(expenseTitle)expenseTitle.textContent=`Gastos · ${label}`;const incomeTitle=$('#incomeViewTitle');if(incomeTitle)incomeTitle.textContent=`Ingresos · ${label}`;}
+function renderMonthLabels(){updateVisibleMonthLabels();}
 function renderHome(){
   const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);

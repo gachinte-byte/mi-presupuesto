@@ -1,4 +1,4 @@
-# Mi Presupuesto — V53
+# Mi Presupuesto — V54
 
 ## Fase 3 — Integración D1 de Ahorros e Ingresos (lectura + escritura)
 
@@ -107,6 +107,10 @@ Ingresos:
 - Se diferencia mes vacío en D1 de error de conexión: los errores no modifican los valores locales.
 
 
-## V53 — mes visible en totales
+## V54 — mes visible en totales
 - Los totales inferiores de Gastos e Ingresos muestran dinámicamente el mes actual: “Gastos · Septiembre 2026” e “Ingresos · Septiembre 2026”.
 - Se actualizan automáticamente al cambiar de mes y no agregan elementos adicionales a la interfaz.
+
+
+## V54
+Corrección: los títulos dinámicos de Gastos e Ingresos ahora se actualizan explícitamente cada vez que cambia el mes, incluyendo después de la sincronización D1.

@@ -1007,14 +1007,11 @@ function renderExpenses(){
     wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
       (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
-      <div class="category-heading-info">
-        <div class="category-title">${esc(cat.displayName||cat.nombre)}</div>
-        <div class="category-total">${money(catTotal)}</div>
-      </div>
+          <div class="category-heading-info"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
       <div class="category-header-detail">
-        <button class="category-detail-btn" type="button" title="Ver gastos del mes" aria-label="Ver gastos del mes" data-action="view-category-detail" data-category-id="${escAttr(cat.id)}">›</button>
+        <button class="category-detail-btn" type="button" title="Ver gastos del mes" aria-label="Ver gastos del mes" data-action="view-category-detail" data-category-id="${escAttr(cat.id)}">i</button>
       </div>
-      <div class="category-header-actions organize-only">
+          <div class="category-header-actions organize-only">
             <button class="small-icon category-edit-btn organize-only" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-central-category" data-category-id="${escAttr(cat.id)}">✏️</button><button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
           </div>
@@ -1645,135 +1642,48 @@ function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{s
 async function resetLocal(){if(!confirm('Esto borrará los datos guardados en este dispositivo y volverá a los datos iniciales. ¿Continuar?'))return;localStorage.removeItem(STORAGE_KEY);const res=await fetch(`${DATA_URL}?reset=${Date.now()}`);state=normalize(await res.json());currentMonth=state.currentMonth;analyticsYear=Number(currentMonth.slice(0,4));save();closeModal();render();toast('Datos restaurados');}
 
 async function openCategoryDetail(categoryId){
+  const modal=document.getElementById("modal");
+  const backdrop=document.getElementById("modalBackdrop");
+  if(!modal||!backdrop)return;
+  const cat=(state.catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
+  const catName=cat?(cat.displayName||cat.nombre):"Gastos";
+  const month=state.currentMonth||state.settings?.currentMonth||"";
+  if(!month){alert("No hay un mes seleccionado.");return;}
+  const api=state.settings?.catalogApiUrl||state.catalogApiUrl||"https://gastos-ia.gachinte.workers.dev";
+  const url=`${api.replace(/\/$/,"")}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
+  modal.innerHTML=`<div class="category-detail-modal"><div class="category-detail-head"><div><div class="category-detail-title">${esc(catName)}</div><div class="category-detail-month">${esc(formatMonthTitle(month))}</div></div><button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button></div><div class="category-detail-loading">Cargando gastos…</div></div>`;
+  backdrop.classList.add("show"); modal.classList.add("show");
   try{
-    const cat = (state.catalog?.categorias || []).find(c => String(c.id) === String(categoryId));
-    const catName = cat ? (cat.displayName || cat.nombre) : "Gastos";
-    const subName = (id, fallback) => {
-      const s = (state.catalog?.subcategorias || []).find(x => String(x.id) === String(id));
-      return s ? (s.displayName || s.nombre) : (fallback || "Sin subcategoría");
+    const res=await fetch(url,{cache:"no-store"});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const data=await res.json();
+    const items=Array.isArray(data.detalle_gastos)?[...data.detalle_gastos]:[];
+    items.sort((a,b)=>String(b.fecha||"").localeCompare(String(a.fecha||""))||String(b.created_at||"").localeCompare(String(a.created_at||"")));
+    const subDisplay=(id,fallback)=>{
+      const s=(state.catalog?.subcategorias||[]).find(x=>String(x.id)===String(id));
+      return s?(s.displayName||s.nombre):(fallback||"Sin subcategoría");
     };
-
-    const month = state.currentMonth || state.settings?.currentMonth || "";
-    if(!month){
-      alert("No hay un mes seleccionado.");
-      return;
-    }
-
-    const api = state.settings?.catalogApiUrl || state.catalogApiUrl || "https://gastos-ia.gachinte.workers.dev";
-    const url = `${api.replace(/\/$/,"")}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
-
-    const modal = document.getElementById("modal");
-    const backdrop = document.getElementById("modalBackdrop");
-    if(!modal || !backdrop) return;
-
-    modal.innerHTML = `
-      <div class="category-detail-modal">
-        <div class="category-detail-head">
-          <div>
-            <div class="category-detail-title">${esc(catName)}</div>
-            <div class="category-detail-month">${esc(formatMonthTitle(month))}</div>
-          </div>
-          <button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button>
-        </div>
-        <div class="category-detail-loading">Cargando gastos…</div>
-      </div>`;
-    backdrop.classList.add("show");
-    modal.classList.add("show");
-
-    const res = await fetch(url, { cache: "no-store" });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    const items = Array.isArray(data.detalle_gastos) ? [...data.detalle_gastos] : [];
-    items.sort((a,b) => String(b.fecha||"").localeCompare(String(a.fecha||"")));
-
-    const groups = [];
-    const groupMap = new Map();
+    const groups=[], map=new Map();
     for(const item of items){
-      const sid = String(item.subcategoria_id || `fallback:${item.subcategoria || "sin"}`);
-      if(!groupMap.has(sid)){
-        const g = {
-          id: sid,
-          name: subName(item.subcategoria_id, item.subcategoria),
-          total: 0,
-          items: []
-        };
-        groupMap.set(sid, g);
-        groups.push(g);
-      }
-      const g = groupMap.get(sid);
-      g.total += Number(item.monto) || 0;
-      g.items.push(item);
+      const key=String(item.subcategoria_id||`fallback:${item.subcategoria||"sin"}`);
+      if(!map.has(key)){const g={name:subDisplay(item.subcategoria_id,item.subcategoria),total:0,items:[]};map.set(key,g);groups.push(g);}
+      const g=map.get(key); g.total+=Number(item.monto)||0; g.items.push(item);
     }
-
-    const total = Number(data.categorias?.find(c => String(c.categoria_id) === String(categoryId))?.total ?? data.total ?? 0) || 0;
-    const count = items.length;
-
-    const fmtDate = (d) => {
-      const s = String(d || "");
-      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if(!m) return s;
-      const dt = new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
-      return dt.toLocaleDateString("es-CO", {day:"2-digit", month:"short"}).replace(".", "");
-    };
-
-    const body = groups.length ? groups.map(g => `
-      <section class="category-detail-group">
-        <div class="category-detail-group-head">
-          <div class="category-detail-sub">${esc(g.name)}</div>
-          <div class="category-detail-subtotal">${money(g.total)}</div>
-        </div>
-        <div class="category-detail-list">
-          ${g.items.map(item => `
-            <div class="category-detail-item">
-              <div class="category-detail-item-date">${esc(fmtDate(item.fecha))}</div>
-              <div class="category-detail-item-desc">
-                <div class="category-detail-item-title">${esc(item.descripcion || item.concepto || item.detalle || "Gasto")}</div>
-              </div>
-              <div class="category-detail-item-amount">${money(Number(item.monto)||0)}</div>
-            </div>`).join("")}
-        </div>
-      </section>`).join("") : `
-      <div class="category-detail-empty">No hay gastos registrados para esta categoría en este mes.</div>`;
-
-    modal.innerHTML = `
-      <div class="category-detail-modal">
-        <div class="category-detail-head">
-          <div>
-            <div class="category-detail-title">${esc(catName)}</div>
-            <div class="category-detail-month">${esc(formatMonthTitle(month))}</div>
-          </div>
-          <button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button>
-        </div>
-        <div class="category-detail-summary">
-          <span>${count} ${count === 1 ? "movimiento" : "movimientos"}</span>
-          <strong>${money(total)}</strong>
-        </div>
-        <div class="category-detail-content">${body}</div>
-      </div>`;
+    const row=Array.isArray(data.categorias)?data.categorias.find(c=>String(c.categoria_id)===String(categoryId)):null;
+    const total=Number(row?.total??0)||0;
+    const fmtDate=d=>{const m=String(d||"").match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return String(d||"");const dt=new Date(+m[1],+m[2]-1,+m[3]);return dt.toLocaleDateString("es-CO",{day:"2-digit",month:"short"}).replace(".","");};
+    const body=groups.length?groups.map(g=>`<section class="category-detail-group"><div class="category-detail-group-head"><div class="category-detail-sub">${esc(g.name)}</div><div class="category-detail-subtotal">${money(g.total)}</div></div><div class="category-detail-list">${g.items.map(item=>`<div class="category-detail-item"><div class="category-detail-item-date">${esc(fmtDate(item.fecha))}</div><div class="category-detail-item-desc"><div class="category-detail-item-title">${esc(item.descripcion||item.concepto||item.detalle||"Gasto")}</div></div><div class="category-detail-item-amount">${money(Number(item.monto)||0)}</div></div>`).join("")}</div></section>`).join(""):`<div class="category-detail-empty">No hay gastos registrados para esta categoría en este mes.</div>`;
+    modal.innerHTML=`<div class="category-detail-modal"><div class="category-detail-head"><div><div class="category-detail-title">${esc(catName)}</div><div class="category-detail-month">${esc(formatMonthTitle(month))}</div></div><button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button></div><div class="category-detail-summary"><span>${items.length} ${items.length===1?"movimiento":"movimientos"}</span><strong>${money(total)}</strong></div><div class="category-detail-content">${body}</div></div>`;
   }catch(err){
-    console.error("Error cargando detalle de categoría:", err);
-    const modal = document.getElementById("modal");
-    if(modal){
-      modal.innerHTML = `
-        <div class="category-detail-modal">
-          <div class="category-detail-head">
-            <div class="category-detail-title">Detalle de gastos</div>
-            <button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button>
-          </div>
-          <div class="category-detail-error">No fue posible cargar el detalle. Revisa la conexión e inténtalo de nuevo.</div>
-        </div>`;
-    }
+    console.error("Error cargando detalle de categoría:",err);
+    modal.innerHTML=`<div class="category-detail-modal"><div class="category-detail-head"><div><div class="category-detail-title">${esc(catName)}</div><div class="category-detail-month">${esc(formatMonthTitle(month))}</div></div><button class="modal-close category-detail-close" type="button" aria-label="Cerrar" data-action="close-modal">×</button></div><div class="category-detail-error">No fue posible cargar el detalle. Inténtalo de nuevo.</div></div>`;
   }
 }
-
 function formatMonthTitle(month){
-  const m = String(month || "").match(/^(\d{4})-(\d{2})$/);
-  if(!m) return month || "";
-  const dt = new Date(Number(m[1]), Number(m[2])-1, 1);
-  return dt.toLocaleDateString("es-CO", {month:"long", year:"numeric"});
+  const m=String(month||"").match(/^(\d{4})-(\d{2})$/);
+  if(!m)return String(month||"");
+  return new Date(+m[1],+m[2]-1,1).toLocaleDateString("es-CO",{month:"long",year:"numeric"});
 }
-
 function closeModal(){$('#modalBackdrop').classList.add('hidden');}
 function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=text;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}

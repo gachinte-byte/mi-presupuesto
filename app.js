@@ -503,8 +503,6 @@ async function boot() {
 
 function bindEvents() {
   document.addEventListener('click', (e) => {
-    const detailBtn = e.target.closest('.category-detail-info');
-    if (detailBtn) { e.preventDefault(); e.stopPropagation(); openCategoryDetail(detailBtn.dataset.categoryId); return; }
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
@@ -989,6 +987,54 @@ function updateLatestExpenseInfo(){
   el.textContent=`📸 Último gasto registrado: ${fmt(d)} · continuar desde ${fmt(next)}`;
   el.style.display='';
 }
+async function openCategoryDetail(categoryId){
+  const catalog=centralCatalog();
+  const cat=(catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
+  if(!cat){toast('No se encontró la categoría.');return;}
+  const catName=state.centralCategoryNames?.[cat.id]||cat.nombre;
+  const month=currentMonth;
+  const apiUrl=String(DEFAULT_GASTOS_IA_WORKER||'').replace(/\/$/,'');
+  const modal=$('#modal'), backdrop=$('#modalBackdrop');
+  if(!modal||!backdrop){toast('No se pudo abrir el detalle.');return;}
+  modal.innerHTML=`<div class="category-detail-modal">
+    <div class="category-detail-head">
+      <div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div>
+      <button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button>
+    </div>
+    <div class="category-detail-loading">Cargando gastos...</div>
+  </div>`;
+  backdrop.classList.remove('hidden');
+  try{
+    const url=`${apiUrl}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
+    const res=await fetch(url,{cache:'no-store'});
+    const data=await res.json();
+    if(!res.ok||!data?.ok)throw new Error(data?.error||'No fue posible consultar los gastos.');
+    const rows=Array.isArray(data.detalle_gastos)?data.detalle_gastos:[];
+    const bySub=new Map();
+    rows.forEach(r=>{
+      const sid=String(r.subcategoria_id||r.subcategoria||'sin-subcategoria');
+      if(!bySub.has(sid))bySub.set(sid,{name:state.centralSubcategoryNames?.[r.subcategoria_id]||r.subcategoria||'Sin subcategoría',rows:[]});
+      bySub.get(sid).rows.push(r);
+    });
+    const groups=[...bySub.values()];
+    groups.forEach(g=>g.rows.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))));
+    groups.sort((a,b)=>String(a.rows[0]?.fecha||'').localeCompare(String(b.rows[0]?.fecha||'')));
+    groups.reverse();
+    const total=Number(data.detalle_categoria_total??data.total??0);
+    const body=groups.length?groups.map(g=>`<section class="category-detail-group"><div class="category-detail-sub">${esc(g.name)}<strong>${money(g.rows.reduce((sum,r)=>sum+Number(r.monto||0),0))}</strong></div>${g.rows.map(r=>`<div class="category-detail-row"><div class="category-detail-row-main"><strong>${esc(formatDetailDate(r.fecha))}</strong><span>${esc(r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto')}</span></div><strong class="category-detail-amount">${money(Number(r.monto||0))}</strong></div>`).join('')}</section>`).join(''):`<div class="category-detail-empty">No hay movimientos registrados para esta categoría en ${esc(monthLabel(month))}.</div>`;
+    modal.innerHTML=`<div class="category-detail-modal">
+      <div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div>
+      <div class="category-detail-total"><span>Total del mes</span><strong>${money(total)}</strong></div>
+      <div class="category-detail-list">${body}</div>
+    </div>`;
+  }catch(err){
+    modal.innerHTML=`<div class="category-detail-modal"><div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div><div class="category-detail-error">No se pudo cargar el detalle.<br><small>${esc(err?.message||'Error de conexión')}</small></div></div>`;
+  }
+}
+function formatDetailDate(value){
+  const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?`${m[3]}/${m[2]}`:String(value||'');
+}
 function renderExpenses(){
   const central=centralCatalogMode();
   updateLatestExpenseInfo();
@@ -1009,8 +1055,7 @@ function renderExpenses(){
     wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
       (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
-          <div class="category-heading-info"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
-          <button class="category-detail-info" type="button" aria-label="Ver gastos de ${escAttr(cat.displayName||cat.nombre)}" title="Ver gastos del mes" data-category-id="${escAttr(cat.id)}"><span aria-hidden="true">i</span></button>
+          <div class="category-heading-info"><div class="category-title-row"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><button class="category-detail-arrow" type="button" title="Ver gastos diarios de ${escAttr(cat.displayName||cat.nombre)}" aria-label="Ver gastos diarios de ${escAttr(cat.displayName||cat.nombre)}" onclick="openCategoryDetail('${escAttr(cat.id)}')"><span aria-hidden="true">›</span></button></div><div class="category-total">${money(catTotal)}</div></div>
           <div class="category-header-actions organize-only">
             <button class="small-icon category-edit-btn organize-only" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-central-category" data-category-id="${escAttr(cat.id)}">✏️</button><button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
@@ -1640,115 +1685,6 @@ function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||40
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
 function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}
 async function resetLocal(){if(!confirm('Esto borrará los datos guardados en este dispositivo y volverá a los datos iniciales. ¿Continuar?'))return;localStorage.removeItem(STORAGE_KEY);const res=await fetch(`${DATA_URL}?reset=${Date.now()}`);state=normalize(await res.json());currentMonth=state.currentMonth;analyticsYear=Number(currentMonth.slice(0,4));save();closeModal();render();toast('Datos restaurados');}
-
-async function openCategoryDetail(categoryId){
-  const modal=$('#modal');
-  const backdrop=$('#modalBackdrop');
-  if(!modal||!backdrop)return;
-
-  const catalog=centralCatalog();
-  const cat=(catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
-  const catName=cat?(state.centralCategoryNames?.[cat.id]||cat.nombre):'Gastos';
-  const month=currentMonth;
-  const apiUrl=DEFAULT_GASTOS_IA_WORKER;
-
-  if(!apiUrl){toast('Falta la URL del Worker.');return;}
-
-  modal.innerHTML=`
-    <div class="category-detail-modal">
-      <div class="category-detail-head">
-        <div>
-          <div class="category-detail-title">${esc(catName)}</div>
-          <div class="category-detail-month">${esc(monthLabel(month))}</div>
-        </div>
-        <button class="category-detail-close-btn" type="button" aria-label="Cerrar" onclick="closeModal()">×</button>
-      </div>
-      <div class="category-detail-loading">Cargando gastos…</div>
-    </div>`;
-  backdrop.classList.remove('hidden');
-
-  try{
-    const endpoint=`${apiUrl.replace(/\/$/,'')}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
-    const response=await fetch(endpoint,{headers:{'Accept':'application/json'},cache:'no-store'});
-    if(!response.ok)throw new Error(`HTTP ${response.status}`);
-    const data=await response.json();
-    if(data?.ok===false)throw new Error(data.error||'Respuesta inválida');
-
-    const items=Array.isArray(data.detalle_gastos)?data.detalle_gastos.slice():[];
-    items.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
-
-    const catalogSubs=catalog?.subcategorias||[];
-    const getSubName=(id,fallback)=>{
-      const s=catalogSubs.find(x=>String(x.id)===String(id));
-      return s?(state.centralSubcategoryNames?.[s.id]||s.nombre):(fallback||'Sin subcategoría');
-    };
-
-    const groups=[];
-    const map=new Map();
-    for(const item of items){
-      const key=String(item.subcategoria_id||item.subcategoria||'sin-subcategoria');
-      if(!map.has(key)){
-        const group={name:getSubName(item.subcategoria_id,item.subcategoria),total:0,items:[]};
-        map.set(key,group); groups.push(group);
-      }
-      const group=map.get(key);
-      group.total+=Number(item.monto)||0;
-      group.items.push(item);
-    }
-
-    const catRow=Array.isArray(data.categorias)?data.categorias.find(x=>String(x.categoria_id)===String(categoryId)):null;
-    const total=Number(catRow?.total??0)||0;
-
-    const formatDate=(value)=>{
-      const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
-      return m?`${m[3]}/${m[2]}`:String(value||'');
-    };
-
-    const groupsHtml=groups.length?groups.map(group=>`
-      <section class="category-detail-group">
-        <div class="category-detail-group-head">
-          <div class="category-detail-sub">${esc(group.name)}</div>
-          <div class="category-detail-subtotal">${money(group.total)}</div>
-        </div>
-        ${group.items.map(item=>`
-          <div class="category-detail-item">
-            <div class="category-detail-item-date">${esc(formatDate(item.fecha))}</div>
-            <div class="category-detail-item-desc">${esc(item.descripcion||item.concepto||item.detalle||'Gasto')}</div>
-            <div class="category-detail-item-amount">${money(Number(item.monto)||0)}</div>
-          </div>`).join('')}
-      </section>`).join(''):`<div class="category-detail-empty">No hay gastos registrados para esta categoría en este mes.</div>`;
-
-    modal.innerHTML=`
-      <div class="category-detail-modal">
-        <div class="category-detail-head">
-          <div>
-            <div class="category-detail-title">${esc(catName)}</div>
-            <div class="category-detail-month">${esc(monthLabel(month))}</div>
-          </div>
-          <button class="category-detail-close-btn" type="button" aria-label="Cerrar" onclick="closeModal()">×</button>
-        </div>
-        <div class="category-detail-summary">
-          <span>${items.length} ${items.length===1?'movimiento':'movimientos'}</span>
-          <strong>${money(total)}</strong>
-        </div>
-        <div class="category-detail-content">${groupsHtml}</div>
-      </div>`;
-  }catch(error){
-    console.error('Detalle de categoría:',error);
-    modal.innerHTML=`
-      <div class="category-detail-modal">
-        <div class="category-detail-head">
-          <div>
-            <div class="category-detail-title">${esc(catName)}</div>
-            <div class="category-detail-month">${esc(monthLabel(month))}</div>
-          </div>
-          <button class="category-detail-close-btn" type="button" aria-label="Cerrar" onclick="closeModal()">×</button>
-        </div>
-        <div class="category-detail-error">No fue posible cargar los gastos. Inténtalo nuevamente.</div>
-      </div>`;
-  }
-}
-
 function closeModal(){$('#modalBackdrop').classList.add('hidden');}
 function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=text;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1758,7 +1694,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.openCategoryDetail=openCategoryDetail;window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;
 
 boot();

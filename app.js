@@ -503,10 +503,11 @@ async function boot() {
 
 function bindEvents() {
   document.addEventListener('click', (e) => {
+    const detailBtn = e.target.closest('.category-detail-info');
+    if (detailBtn) { e.preventDefault(); e.stopPropagation(); openCategoryDetail(detailBtn.dataset.categoryId); return; }
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
-    if (action === 'view-category-detail') { e.preventDefault(); e.stopPropagation(); openCategoryDetail(btn.dataset.categoryId); return; }
     // Notas: resolverlas aquí, antes que cualquier otro handler, para que
     // funcionen también cuando los botones se crean dinámicamente al renderizar.
     if (action === 'toggle-monthly-notes') { e.preventDefault(); e.stopPropagation(); toggleMonthlyNotes(); return; }
@@ -1009,9 +1010,7 @@ function renderExpenses(){
       (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
           <div class="category-heading-info"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><div class="category-total">${money(catTotal)}</div></div>
-          <div class="category-header-detail">
-            <button class="category-detail-btn" type="button" title="Ver gastos del mes" aria-label="Ver gastos del mes" data-action="view-category-detail" data-category-id="${escAttr(cat.id)}">i</button>
-          </div>
+          <button class="category-detail-info" type="button" aria-label="Ver gastos de ${escAttr(cat.displayName||cat.nombre)}" title="Ver gastos del mes" data-category-id="${escAttr(cat.id)}"><span aria-hidden="true">i</span></button>
           <div class="category-header-actions organize-only">
             <button class="small-icon category-edit-btn organize-only" title="Editar nombre de categoría" aria-label="Editar nombre de categoría" data-action="edit-central-category" data-category-id="${escAttr(cat.id)}">✏️</button><button class="order-text-btn" title="Mover categoría arriba" aria-label="Mover categoría arriba" data-action="move-central-category-up" data-category-id="${escAttr(cat.id)}" ${catIndex>0?'':'disabled'}>↑</button>
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
@@ -1651,8 +1650,8 @@ async function openCategoryDetail(categoryId){
   const cat=(catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
   const catName=cat?(state.centralCategoryNames?.[cat.id]||cat.nombre):'Gastos';
   const month=currentMonth;
-
   const apiUrl=DEFAULT_GASTOS_IA_WORKER;
+
   if(!apiUrl){toast('Falta la URL del Worker.');return;}
 
   modal.innerHTML=`
@@ -1669,53 +1668,54 @@ async function openCategoryDetail(categoryId){
   backdrop.classList.remove('hidden');
 
   try{
-    const url=`${apiUrl.replace(/\/$/,'')}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
-    const res=await fetch(url,{headers:{'Accept':'application/json'},cache:'no-store'});
-    if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    const data=await res.json();
-    if(!data||data.ok===false)throw new Error(data?.error||'Respuesta inválida');
+    const endpoint=`${apiUrl.replace(/\/$/,'')}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`;
+    const response=await fetch(endpoint,{headers:{'Accept':'application/json'},cache:'no-store'});
+    if(!response.ok)throw new Error(`HTTP ${response.status}`);
+    const data=await response.json();
+    if(data?.ok===false)throw new Error(data.error||'Respuesta inválida');
 
     const items=Array.isArray(data.detalle_gastos)?data.detalle_gastos.slice():[];
     items.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));
 
-    const subs=(catalog?.subcategorias||[]);
-    const subName=(id,fallback)=>{
-      const s=subs.find(x=>String(x.id)===String(id));
+    const catalogSubs=catalog?.subcategorias||[];
+    const getSubName=(id,fallback)=>{
+      const s=catalogSubs.find(x=>String(x.id)===String(id));
       return s?(state.centralSubcategoryNames?.[s.id]||s.nombre):(fallback||'Sin subcategoría');
     };
 
-    const groups=[],map=new Map();
+    const groups=[];
+    const map=new Map();
     for(const item of items){
-      const key=String(item.subcategoria_id||`__${item.subcategoria||'sin'}`);
-      if(!map.has(key)){const g={name:subName(item.subcategoria_id,item.subcategoria),total:0,items:[]};map.set(key,g);groups.push(g);}
-      const g=map.get(key); g.total+=Number(item.monto)||0; g.items.push(item);
+      const key=String(item.subcategoria_id||item.subcategoria||'sin-subcategoria');
+      if(!map.has(key)){
+        const group={name:getSubName(item.subcategoria_id,item.subcategoria),total:0,items:[]};
+        map.set(key,group); groups.push(group);
+      }
+      const group=map.get(key);
+      group.total+=Number(item.monto)||0;
+      group.items.push(item);
     }
 
     const catRow=Array.isArray(data.categorias)?data.categorias.find(x=>String(x.categoria_id)===String(categoryId)):null;
     const total=Number(catRow?.total??0)||0;
 
-    const fmtDate=(d)=>{
-      const m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if(!m)return String(d||'');
-      return `${m[3]}/${m[2]}`;
+    const formatDate=(value)=>{
+      const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m?`${m[3]}/${m[2]}`:String(value||'');
     };
 
-    const body=groups.length?groups.map(g=>`
+    const groupsHtml=groups.length?groups.map(group=>`
       <section class="category-detail-group">
         <div class="category-detail-group-head">
-          <div class="category-detail-sub">${esc(g.name)}</div>
-          <div class="category-detail-subtotal">${money(g.total)}</div>
+          <div class="category-detail-sub">${esc(group.name)}</div>
+          <div class="category-detail-subtotal">${money(group.total)}</div>
         </div>
-        <div class="category-detail-list">
-          ${g.items.map(item=>`
-            <div class="category-detail-item">
-              <div class="category-detail-item-date">${esc(fmtDate(item.fecha))}</div>
-              <div class="category-detail-item-desc">
-                <div class="category-detail-item-title">${esc(item.descripcion||item.concepto||item.detalle||'Gasto')}</div>
-              </div>
-              <div class="category-detail-item-amount">${money(Number(item.monto)||0)}</div>
-            </div>`).join('')}
-        </div>
+        ${group.items.map(item=>`
+          <div class="category-detail-item">
+            <div class="category-detail-item-date">${esc(formatDate(item.fecha))}</div>
+            <div class="category-detail-item-desc">${esc(item.descripcion||item.concepto||item.detalle||'Gasto')}</div>
+            <div class="category-detail-item-amount">${money(Number(item.monto)||0)}</div>
+          </div>`).join('')}
       </section>`).join(''):`<div class="category-detail-empty">No hay gastos registrados para esta categoría en este mes.</div>`;
 
     modal.innerHTML=`
@@ -1731,10 +1731,10 @@ async function openCategoryDetail(categoryId){
           <span>${items.length} ${items.length===1?'movimiento':'movimientos'}</span>
           <strong>${money(total)}</strong>
         </div>
-        <div class="category-detail-content">${body}</div>
+        <div class="category-detail-content">${groupsHtml}</div>
       </div>`;
-  }catch(err){
-    console.error('Error detalle categoría:',err);
+  }catch(error){
+    console.error('Detalle de categoría:',error);
     modal.innerHTML=`
       <div class="category-detail-modal">
         <div class="category-detail-head">
@@ -1744,7 +1744,7 @@ async function openCategoryDetail(categoryId){
           </div>
           <button class="category-detail-close-btn" type="button" aria-label="Cerrar" onclick="closeModal()">×</button>
         </div>
-        <div class="category-detail-error">No fue posible cargar los gastos. Revisa la conexión con Gastos IA.</div>
+        <div class="category-detail-error">No fue posible cargar los gastos. Inténtalo nuevamente.</div>
       </div>`;
   }
 }
@@ -1758,7 +1758,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.openCategoryDetail=openCategoryDetail;window.closeModal=closeModal;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;
 
 boot();

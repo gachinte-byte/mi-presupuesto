@@ -1020,11 +1020,11 @@ async function openCategoryDetail(categoryId){
     groups.forEach(g=>g.rows.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))));
     groups.sort((a,b)=>String(a.rows[0]?.fecha||'').localeCompare(String(b.rows[0]?.fecha||'')));
     groups.reverse();
-    const total=Number(data.detalle_categoria_total??data.total??0);
+    const total=rows.reduce((sum,r)=>sum+Number(r.monto||0),0);
     const body=groups.length?groups.map(g=>`<section class="category-detail-group"><div class="category-detail-sub">${esc(g.name)}<strong>${money(g.rows.reduce((sum,r)=>sum+Number(r.monto||0),0))}</strong></div>${g.rows.map(r=>`<div class="category-detail-row"><div class="category-detail-row-main"><strong>${esc(formatDetailDate(r.fecha))}</strong><span>${esc(r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto')}</span></div><strong class="category-detail-amount">${money(Number(r.monto||0))}</strong></div>`).join('')}</section>`).join(''):`<div class="category-detail-empty">No hay movimientos registrados para esta categoría en ${esc(monthLabel(month))}.</div>`;
     modal.innerHTML=`<div class="category-detail-modal">
       <div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div>
-      <div class="category-detail-total"><span>Total del mes</span><strong>${money(total)}</strong></div>
+      <div class="category-detail-total"><span>Total de la categoría</span><strong>${money(total)}</strong></div>
       <div class="category-detail-list">${body}</div>
     </div>`;
   }catch(err){

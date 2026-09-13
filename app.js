@@ -76,6 +76,7 @@ function normalize(data) {
   data.centralSubcategoryOrder ||= {};
   data.centralCategoryNames ||= {};
   data.centralSubcategoryNames ||= {};
+  data.expenseBudgets ||= {};
   data.settings.catalogChatId ||= '';
   data.incomeOrganizeMode = data.incomeOrganizeMode === true;
   data.monthlyNotes ||= {};
@@ -565,6 +566,7 @@ function bindEvents() {
   document.addEventListener('click',handleChartClick);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
+  $('#expenseBudgetsBtn').onclick=openExpenseBudgets;
   $('#toggleSavingsOrganize').onclick=toggleSavingsOrganize;
   $('#toggleIncomeOrganize').onclick=toggleIncomeOrganize;
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
@@ -1152,6 +1154,80 @@ function formatDetailDate(value){
   const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m?`${m[3]}/${m[2]}`:String(value||'');
 }
+function expenseBudgetForCategory(categoryId){
+  const b=state?.expenseBudgets?.[String(categoryId)];
+  if(!b) return null;
+  const type=b.type==='percent'?'percent':'fixed';
+  const value=Number(b.value||0);
+  return value>0?{type,value}:null;
+}
+function monthlyIncomeTotal(month=currentMonth){return state.incomeItems.reduce((s,x)=>s+getMonthValue(x,month),0);}
+function categoryBudgetInfo(categoryId,spent,month=currentMonth){
+  const budget=expenseBudgetForCategory(categoryId);
+  if(!budget) return null;
+  const income=monthlyIncomeTotal(month);
+  const limit=budget.type==='percent' ? income*(budget.value/100) : budget.value;
+  if(!(limit>0)) return {budget,limit:0,spent,percent:0,remaining:0,income};
+  const percent=(spent/limit)*100;
+  const remaining=limit-spent;
+  const tone=percent<=70?'good':percent<=90?'warning':'danger';
+  return {budget,limit,spent,percent,remaining,income,tone};
+}
+function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
+  const info=categoryBudgetInfo(categoryId,spent,month);
+  if(!info || !(info.limit>0)) return '';
+  const width=Math.min(100,Math.max(0,info.percent));
+  const pct=Math.round(info.percent);
+  const detail=info.remaining>=0?`Te quedan ${money(info.remaining)}`:`Te pasaste ${money(Math.abs(info.remaining))}`;
+  const limitText=info.budget.type==='percent'
+    ? `Límite del mes ${money(info.limit)} · ${formatNumber(info.budget.value)}% de ingresos`
+    : `Límite del mes ${money(info.limit)}`;
+  return `<div class="expense-budget-box ${info.tone}">
+    <div class="expense-budget-text"><span>${limitText}</span><strong>${pct}%</strong></div>
+    <div class="expense-budget-track" role="progressbar" aria-label="Uso del límite de ${pct}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,pct)}"><div class="expense-budget-fill" style="width:${width}%"></div></div>
+    <div class="expense-budget-foot"><span>${detail}</span><span>${money(info.limit)}</span></div>
+  </div>`;
+}
+function openExpenseBudgets(){
+  const catalog=centralCatalog();
+  const cats=catalog?.categorias||[];
+  const income=monthlyIncomeTotal(currentMonth);
+  const rows=cats.map(cat=>{
+    const b=expenseBudgetForCategory(cat.id)||{type:'fixed',value:''};
+    const spent=cat.subcategorias.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
+    return `<div class="budget-setting-row">
+      <div class="budget-setting-head"><strong>${esc(centralCategoryDisplayName(cat))}</strong><span>Gastado: ${money(spent)}</span></div>
+      <div class="budget-setting-controls">
+        <select class="select budget-type" data-budget-category="${escAttr(cat.id)}">
+          <option value="fixed" ${b.type==='fixed'?'selected':''}>Monto fijo</option>
+          <option value="percent" ${b.type==='percent'?'selected':''}>% de ingresos</option>
+        </select>
+        <input class="input number-format budget-value" data-budget-category="${escAttr(cat.id)}" inputmode="decimal" placeholder="0" value="${b.value?formatNumber(b.value):''}">
+      </div>
+    </div>`;
+  }).join('');
+  $('#modal').innerHTML=`<div class="budget-modal">
+    <div class="modal-title-row"><h3>Límites de gastos</h3><button class="modal-close" type="button" onclick="closeModal()" aria-label="Cerrar">×</button></div>
+    <p class="helper">Define un límite mensual por categoría. Es local en este dispositivo y no modifica D1.</p>
+    <div class="budget-income-note">Ingresos de ${esc(monthLabel(currentMonth))}: <strong>${money(income)}</strong></div>
+    <div class="budget-setting-list">${rows||'<div class="empty">No hay categorías activas.</div>'}</div>
+    <div class="form-actions"><button class="secondary-btn" type="button" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="button" onclick="saveExpenseBudgets()">Guardar límites</button></div>
+  </div>`;
+  $('#modalBackdrop').classList.remove('hidden');
+}
+function saveExpenseBudgets(){
+  state.expenseBudgets ||= {};
+  $$('.budget-type').forEach(sel=>{
+    const catId=String(sel.dataset.budgetCategory||'');
+    const input=document.querySelector(`.budget-value[data-budget-category="${CSS.escape(catId)}"]`);
+    const value=numberValue(input?.value||0);
+    const type=sel.value==='percent'?'percent':'fixed';
+    if(!catId || !(value>0)){ delete state.expenseBudgets[catId]; return; }
+    state.expenseBudgets[catId]={type,value};
+  });
+  save(); closeModal(); renderExpenses(); toast('Límites guardados');
+}
+
 function renderExpenses(){
   const central=centralCatalogMode();
   updateLatestExpenseInfo();
@@ -1178,6 +1254,7 @@ function renderExpenses(){
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
           </div>
         </div>
+        ${expenseBudgetBarHTML(cat.id,catTotal,currentMonth)}
         <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const source=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]; const edited=source==='manual'; return `<div class="expense-item central-expense-item ${edited?'is-edited':''}">
           <div class="row-top"><div class="row-title"><strong>${esc(sub.displayName||sub.nombre)}</strong>${edited?'<small class="source-badge edited-badge">✏️ Editado</small>':(source==='d1'?'<small class="source-badge d1-source-badge">☁️ D1</small>':'')}</div><div class="row-actions organize-only"><button class="small-icon category-edit-btn organize-only" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" data-action="edit-central-subcategory" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}">✏️</button><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
           <div class="central-value-wrap"><input class="value-input" inputmode="numeric" aria-label="${esc(sub.displayName||sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)"></div>

@@ -1184,7 +1184,7 @@ function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
     return `<div class="expense-budget-box no-budget">
       <div class="expense-budget-text"><span>Límite del mes</span><strong>Sin definir</strong></div>
       <div class="expense-budget-track empty"><div class="expense-budget-fill" style="width:0%"></div></div>
-      <div class="expense-budget-foot"><span>Esta categoría no tiene un límite configurado.</span><button type="button" class="expense-budget-config" onclick="openExpenseBudgets()">Definir límite</button></div>
+      <div class="expense-budget-foot"><span>Esta categoría no tiene un límite configurado.</span><button type="button" class="expense-budget-config" data-budget-category="${escAttr(categoryId)}" onclick="openExpenseBudgets('${escAttr(categoryId)}')">Definir límite</button></div>
     </div>`;
   }
   const width=Math.min(100,Math.max(0,info.percent));
@@ -1196,17 +1196,22 @@ function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
     <div class="expense-budget-foot"><span>${detail}</span></div>
   </div>`;
 }
-function openExpenseBudgets(){
+function openExpenseBudgets(focusCategoryId=''){
   const modalEl=$('#modal');
-  modalEl?.classList.remove('settings-modal-host');
-  modalEl?.classList.add('budget-modal-host');
+  if(!modalEl)return;
+  modalEl.classList.remove('settings-modal-host');
+  modalEl.classList.add('budget-modal-host');
   const catalog=centralCatalog();
-  const cats=catalog?.categorias||[];
+  const cats=(catalog?.categorias||[]).filter(cat=>Number(cat.activa??1)!==0);
+  const subs=(catalog?.subcategorias||[]).filter(sub=>Number(sub.activa??1)!==0);
   const income=monthlyIncomeTotal(currentMonth);
   const rows=cats.map(cat=>{
     const b=expenseBudgetForCategory(cat.id)||{type:'fixed',value:''};
-    const spent=cat.subcategorias.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
-    return `<div class="budget-setting-row">
+    // El catálogo D1 guarda las subcategorías en una lista plana; se filtran
+    // por categoria_id para calcular correctamente lo gastado.
+    const catSubs=subs.filter(sub=>String(sub.categoria_id)===String(cat.id));
+    const spent=catSubs.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
+    return `<div class="budget-setting-row" data-budget-row-category="${escAttr(cat.id)}">
       <div class="budget-setting-head"><strong>${esc(centralCategoryDisplayName(cat))}</strong><span>Gastado: ${money(spent)}</span></div>
       <div class="budget-setting-controls">
         <select class="select budget-type" data-budget-category="${escAttr(cat.id)}">
@@ -1217,14 +1222,20 @@ function openExpenseBudgets(){
       </div>
     </div>`;
   }).join('');
-  $('#modal').innerHTML=`<div class="budget-modal">
-    <div class="modal-title-row"><h3>Límites de gastos</h3><button class="modal-close" type="button" onclick="closeModal()" aria-label="Cerrar">×</button></div>
+  modalEl.innerHTML=`<div class="budget-modal">
+    <div class="modal-title-row"><div><div class="category-detail-kicker">GASTOS</div><h3>Límites de gastos</h3></div><button class="modal-close" type="button" onclick="closeModal()" aria-label="Cerrar">×</button></div>
     <p class="helper">Define un límite mensual por categoría. Es local en este dispositivo y no modifica D1.</p>
     <div class="budget-income-note">Ingresos de ${esc(monthLabel(currentMonth))}: <strong>${money(income)}</strong></div>
     <div class="budget-setting-list">${rows||'<div class="empty">No hay categorías activas.</div>'}</div>
     <div class="form-actions"><button class="secondary-btn" type="button" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="button" onclick="saveExpenseBudgets()">Guardar límites</button></div>
   </div>`;
-  $('#modalBackdrop').classList.remove('hidden');
+  const backdrop=$('#modalBackdrop');
+  backdrop?.classList.remove('hidden');
+  if(focusCategoryId){
+    const row=modalEl.querySelector(`[data-budget-row-category=\"${CSS.escape(String(focusCategoryId))}\"]`);
+    row?.scrollIntoView({block:'center',behavior:'auto'});
+    row?.querySelector('.budget-value')?.focus({preventScroll:true});
+  }
 }
 function saveExpenseBudgets(){
   state.expenseBudgets ||= {};
@@ -1903,5 +1914,23 @@ window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCat
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
+
+// V85: controles críticos independientes del resto de bindEvents().
+// Esto evita que un fallo en otro listener deje sin respuesta Límites o Configuración.
+document.addEventListener('click',e=>{
+  const budgetBtn=e.target.closest?.('#expenseBudgetsBtn,.expense-budget-config');
+  if(budgetBtn){
+    e.preventDefault();
+    e.stopPropagation();
+    openExpenseBudgets(budgetBtn.dataset.budgetCategory||'');
+    return;
+  }
+  const settingsBtn=e.target.closest?.('#settingsBtn');
+  if(settingsBtn){
+    e.preventDefault();
+    e.stopPropagation();
+    openSettings();
+  }
+},{capture:true});
 
 boot();

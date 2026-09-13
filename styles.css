@@ -337,3 +337,23 @@ body.income-organizing .income-data-row{background:#faf9fc}
 @media(min-width:521px){
   .modal.settings-modal-host,.modal.budget-modal-host{overflow-y:auto}
 }
+
+
+/* V85 - límites compactos y visibles */
+.expense-budget-box{margin:0 8px 8px!important;padding:7px 9px 6px!important;border-radius:10px!important}
+.expense-budget-track{height:5px!important;min-height:5px!important;max-height:5px!important;margin:5px 0 4px!important;border-radius:999px!important}
+.expense-budget-fill{height:5px!important;min-height:5px!important;max-height:5px!important}
+.expense-budget-text{font-size:10px!important;line-height:1.15!important}
+.expense-budget-text strong{font-size:11px!important}
+.expense-budget-foot{font-size:9.5px!important;line-height:1.15!important}
+.expense-budget-config{font-size:9.5px!important;padding:1px 0!important}
+@media(max-width:430px){
+  .expense-budget-box{margin:0 6px 7px!important;padding:7px 8px 6px!important}
+  .expense-budget-track{height:5px!important;min-height:5px!important;max-height:5px!important;margin:5px 0 4px!important}
+  .expense-budget-fill{height:5px!important;min-height:5px!important;max-height:5px!important}
+}
+/* V85 - botones superiores de Gastos más discretos */
+@media(max-width:520px){
+  #view-expenses .page-title-row .title-actions{gap:4px}
+  #view-expenses .page-title-row .title-actions button{padding:7px 8px!important;font-size:10px!important;border-radius:9px!important}
+}

@@ -1193,6 +1193,9 @@ function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
   </div>`;
 }
 function openExpenseBudgets(){
+  const modalEl=$('#modal');
+  modalEl?.classList.remove('settings-modal-host');
+  modalEl?.classList.add('budget-modal-host');
   const catalog=centralCatalog();
   const cats=catalog?.categorias||[];
   const income=monthlyIncomeTotal(currentMonth);
@@ -1854,6 +1857,9 @@ async function importExcel(file){
 }
 
 function openSettings(){
+  const modalEl=$('#modal');
+  modalEl?.classList.remove('budget-modal-host');
+  modalEl?.classList.add('settings-modal-host');
   const chatId=state.settings.catalogChatId||'';
   $('#modal').innerHTML=`<h3>Configuración</h3><div class="settings-list">
   <div class="settings-block"><strong>☁️ Conexión con Gastos IA</strong><p class="helper">Worker conectado: <strong>gastos-ia.gachinte.workers.dev</strong></p>
@@ -1882,7 +1888,7 @@ function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||40
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
 function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}
 async function resetLocal(){if(!confirm('Esto borrará los datos guardados en este dispositivo y volverá a los datos iniciales. ¿Continuar?'))return;localStorage.removeItem(STORAGE_KEY);const res=await fetch(`${DATA_URL}?reset=${Date.now()}`);state=normalize(await res.json());currentMonth=state.currentMonth;analyticsYear=Number(currentMonth.slice(0,4));save();closeModal();render();toast('Datos restaurados');}
-function closeModal(){$('#modalBackdrop').classList.add('hidden');}
+function closeModal(){const modalEl=$('#modal');modalEl?.classList.remove('settings-modal-host','budget-modal-host');$('#modalBackdrop').classList.add('hidden');}
 function toast(text){const old=document.querySelector('.toast');if(old)old.remove();const t=document.createElement('div');t.className='toast';t.textContent=text;document.body.appendChild(t);setTimeout(()=>t.remove(),2200);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function escAttr(s){return esc(s).replace(/`/g,'&#96;');}

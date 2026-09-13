@@ -155,3 +155,6 @@ V67: corrigió el desplegable de Notas de Análisis con estado explícito y agre
 
 ## V82 – Barra de límite visible en detalle
 La barra de límite mensual se muestra siempre dentro del detalle diario de la categoría. Si aún no existe un límite para esa categoría, se muestra un estado neutral ‘Sin definir’ con acceso directo a la configuración de límites.
+
+
+V83: límites configurables con modal independiente y configuración con scroll independiente en móvil; controles superiores de Gastos compactos.

@@ -319,3 +319,21 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .budget-setting-controls{display:grid;grid-template-columns:1.2fr .8fr;gap:7px}
 .budget-setting-controls .input,.budget-setting-controls .select{padding:10px;font-size:13px}
 @media(max-width:430px){.expense-budget-box{margin:0 11px 3px;padding:8px 9px}.expense-budget-text{font-size:9.5px}.expense-budget-foot{font-size:9.5px}.budget-setting-controls{grid-template-columns:1.15fr .85fr}.budget-setting-list{max-height:52vh}}
+
+/* V83 - configuración y límites con desplazamiento independiente en móvil */
+@media(max-width:520px){
+  .page-title-row .title-actions{width:auto;flex-wrap:nowrap;gap:5px;margin-left:auto}
+  .page-title-row .title-actions button{flex:0 0 auto;padding:8px 9px;font-size:11px;border-radius:10px}
+  .page-title-row .title-actions #expenseBudgetsBtn{padding-left:8px;padding-right:8px}
+  .page-title-row .title-actions #toggleExpenseOrganize{padding-left:8px;padding-right:8px}
+  .page-title-row .title-actions #addExpenseBtn{padding-left:9px;padding-right:9px}
+  .modal.settings-modal-host,.modal.budget-modal-host{height:88dvh;max-height:88dvh;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .settings-modal-host .settings-list{padding-bottom:6px}
+  .settings-modal-host .form-actions{position:sticky;bottom:0;background:var(--card);padding-top:10px;padding-bottom:calc(2px + env(safe-area-inset-bottom));z-index:3}
+  .budget-modal-host .budget-modal{min-height:0}
+  .budget-modal-host .budget-setting-list{max-height:none;overflow:visible}
+  .budget-modal-host .form-actions{position:sticky;bottom:0;background:var(--card);padding-top:10px;padding-bottom:calc(2px + env(safe-area-inset-bottom));z-index:3}
+}
+@media(min-width:521px){
+  .modal.settings-modal-host,.modal.budget-modal-host{overflow-y:auto}
+}

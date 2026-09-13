@@ -991,7 +991,7 @@ async function openCategoryDetail(categoryId){
   const catalog=centralCatalog();
   const cat=(catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
   if(!cat){toast('No se encontró la categoría.');return;}
-  const catName=state.centralCategoryNames?.[cat.id]||cat.nombre;
+  const catName=centralCategoryDisplayName(cat);
   const month=currentMonth;
   const apiUrl=String(DEFAULT_GASTOS_IA_WORKER||'').replace(/\/$/,'');
   const modal=$('#modal'), backdrop=$('#modalBackdrop');
@@ -1013,15 +1013,14 @@ async function openCategoryDetail(categoryId){
     const bySub=new Map();
     rows.forEach(r=>{
       const sid=String(r.subcategoria_id||r.subcategoria||'sin-subcategoria');
-      if(!bySub.has(sid))bySub.set(sid,{name:state.centralSubcategoryNames?.[r.subcategoria_id]||r.subcategoria||'Sin subcategoría',rows:[]});
+      if(!bySub.has(sid))bySub.set(sid,{name:centralSubcategoryDisplayName((catalog?.subcategorias||[]).find(x=>String(x.id)===String(r.subcategoria_id)))||r.subcategoria||'Sin subcategoría',rows:[]});
       bySub.get(sid).rows.push(r);
     });
     const groups=[...bySub.values()];
     groups.forEach(g=>g.rows.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))));
-    groups.sort((a,b)=>String(a.rows[0]?.fecha||'').localeCompare(String(b.rows[0]?.fecha||'')));
-    groups.reverse();
+    groups.sort((a,b)=>String(a.rows[0]?.fecha||'').localeCompare(String(b.rows[0]?.fecha||''))).reverse();
     const total=rows.reduce((sum,r)=>sum+Number(r.monto||0),0);
-    const body=groups.length?groups.map(g=>`<section class="category-detail-group"><div class="category-detail-sub">${esc(g.name)}<strong>${money(g.rows.reduce((sum,r)=>sum+Number(r.monto||0),0))}</strong></div>${g.rows.map(r=>`<div class="category-detail-row"><div class="category-detail-row-main"><strong>${esc(formatDetailDate(r.fecha))}</strong><span>${esc(r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto')}</span></div><strong class="category-detail-amount">${money(Number(r.monto||0))}</strong></div>`).join('')}</section>`).join(''):`<div class="category-detail-empty">No hay movimientos registrados para esta categoría en ${esc(monthLabel(month))}.</div>`;
+    const body=groups.length?groups.map(g=>`<section class="category-detail-group"><div class="category-detail-sub">${esc(g.name)}<strong>${money(g.rows.reduce((sum,r)=>sum+Number(r.monto||0),0))}</strong></div>${g.rows.map(r=>`<button type="button" class="category-detail-row category-detail-row-button" data-gasto-item-id="${escAttr(r.gasto_item_id||'')}" data-category-id="${escAttr(categoryId)}" onclick="openExpenseDetail('${escAttr(r.gasto_item_id||'')}','${escAttr(categoryId)}')"><div class="category-detail-row-main"><strong>${esc(formatDetailDate(r.fecha))}</strong><span>${esc(r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto')}</span></div><strong class="category-detail-amount">${money(Number(r.monto||0))}</strong></button>`).join('')}</section>`).join(''):`<div class="category-detail-empty">No hay movimientos registrados para esta categoría en ${esc(monthLabel(month))}.</div>`;
     modal.innerHTML=`<div class="category-detail-modal">
       <div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div>
       <div class="category-detail-total"><span>Total de la categoría</span><strong>${money(total)}</strong></div>
@@ -1030,6 +1029,124 @@ async function openCategoryDetail(categoryId){
   }catch(err){
     modal.innerHTML=`<div class="category-detail-modal"><div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div><div class="category-detail-error">No se pudo cargar el detalle.<br><small>${esc(err?.message||'Error de conexión')}</small></div></div>`;
   }
+}
+
+async function openExpenseDetail(gastoItemId, categoryId){
+  if(!gastoItemId){toast('No se encontró el movimiento.');return;}
+  const catalog=centralCatalog();
+  const cat=(catalog?.categorias||[]).find(c=>String(c.id)===String(categoryId));
+  const catName=cat?centralCategoryDisplayName(cat):'Gastos';
+  const month=currentMonth;
+  const apiUrl=String(DEFAULT_GASTOS_IA_WORKER||'').replace(/\/$/,'');
+  const modal=$('#modal'), backdrop=$('#modalBackdrop');
+  if(!modal||!backdrop)return;
+  modal.innerHTML=`<div class="expense-detail-modal"><div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>Cargando...</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div></div>`;
+  backdrop.classList.remove('hidden');
+  try{
+    const res=await fetch(`${apiUrl}/presupuesto/gastos?mes=${encodeURIComponent(month)}&detalle=1&categoria_id=${encodeURIComponent(categoryId)}`,{cache:'no-store'});
+    const data=await res.json();
+    if(!res.ok||!data?.ok)throw new Error(data?.error||'No fue posible consultar el gasto.');
+    const r=(data.detalle_gastos||[]).find(x=>String(x.gasto_item_id)===String(gastoItemId));
+    if(!r)throw new Error('El movimiento ya no está disponible en esta categoría.');
+    window.__selectedExpenseDetail = r;
+    const sub=(catalog?.subcategorias||[]).find(x=>String(x.id)===String(r.subcategoria_id));
+    const desc=r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto';
+    modal.innerHTML=`<div class="expense-detail-modal">
+      <div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>${esc(desc)}</h3><div class="category-detail-month">${esc(formatDetailDate(r.fecha))} · ${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div>
+      <div class="expense-detail-card">
+        <div><span>Fecha</span><strong>${esc(formatDetailDateFull(r.fecha))}</strong></div>
+        <div><span>Descripción</span><strong>${esc(desc)}</strong></div>
+        <div><span>Valor</span><strong>${money(Number(r.monto||0))}</strong></div>
+        <div><span>Comercio</span><strong>${esc(r.comercio||'—')}</strong></div>
+        <div><span>Forma de pago</span><strong>${esc(r.forma_pago||'—')}</strong></div>
+        <div><span>Categoría actual</span><strong>${esc(catName)}</strong></div>
+        <div><span>Subcategoría actual</span><strong>${esc(centralSubcategoryDisplayName(sub)||r.subcategoria||'—')}</strong></div>
+      </div>
+      <button type="button" class="primary-btn expense-reclassify-btn" onclick="openReclassifyExpense('${escAttr(r.gasto_item_id)}','${escAttr(categoryId)}')">✏️ Cambiar clasificación</button>
+      <button type="button" class="secondary-btn expense-close-btn" onclick="openCategoryDetail('${escAttr(categoryId)}')">Cerrar</button>
+    </div>`;
+  }catch(err){
+    modal.innerHTML=`<div class="expense-detail-modal"><div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>No se pudo cargar</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div><div class="category-detail-error">${esc(err?.message||'Error de conexión')}</div></div>`;
+  }
+}
+
+function formatDetailDateFull(value){
+  const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?`${m[3]}/${m[2]}/${m[1]}`:String(value||'');
+}
+function populateReclassSubcategories(categoryId, selectedId=''){
+  const select=$('#reclassSubcategory'); if(!select)return;
+  const subs=(centralCatalog()?.subcategorias||[]).filter(s=>String(s.categoria_id)===String(categoryId) && Number(s.activa??1)!==0);
+  select.innerHTML=`<option value="">Selecciona una subcategoría</option>`+subs.map(s=>`<option value="${escAttr(s.id)}" ${String(s.id)===String(selectedId)?'selected':''}>${esc(centralSubcategoryDisplayName(s))}</option>`).join('');
+}
+async function openReclassifyExpense(gastoItemId, categoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){
+    await openExpenseDetail(gastoItemId,categoryId);
+    return;
+  }
+  const catalog=centralCatalog();
+  const cats=(catalog?.categorias||[]).filter(c=>Number(c.activa??1)!==0);
+  const currentCat=String(r.categoria_id||categoryId||'');
+  const currentSub=String(r.subcategoria_id||'');
+  const currentCatObj=cats.find(c=>String(c.id)===currentCat);
+  const catName=currentCatObj?centralCategoryDisplayName(currentCatObj):r.categoria||'—';
+  const subName=centralSubcategoryDisplayName((catalog?.subcategorias||[]).find(s=>String(s.id)===currentSub))||r.subcategoria||'—';
+  const desc=r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto';
+  $('#modal').innerHTML=`<div class="expense-reclassify-modal">
+    <div class="expense-detail-head"><div><div class="category-detail-kicker">CAMBIAR CLASIFICACIÓN</div><h3>Reclasificar gasto</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openExpenseDetail('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">×</button></div>
+    <div class="reclass-expense-summary"><strong>${esc(desc)}</strong><span>${esc(formatDetailDateFull(r.fecha))} · ${money(Number(r.monto||0))}</span></div>
+    <div class="form-field"><label>Categoría</label><select id="reclassCategory" class="select" onchange="populateReclassSubcategories(this.value)">${cats.map(c=>`<option value="${escAttr(c.id)}" ${String(c.id)===currentCat?'selected':''}>${esc(centralCategoryDisplayName(c))}</option>`).join('')}</select></div>
+    <div class="form-field"><label>Subcategoría</label><select id="reclassSubcategory" class="select"></select></div>
+    <div class="reclass-info">ⓘ Solo se modificará la clasificación. La fecha, descripción, valor y demás datos del gasto no cambiarán.</div>
+    <div class="reclass-current"><span>Actualmente</span><strong>${esc(catName)} → ${esc(subName)}</strong></div>
+    <div class="form-actions"><button type="button" class="secondary-btn" onclick="openExpenseDetail('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">Cancelar</button><button type="button" class="primary-btn" onclick="confirmReclassifyExpense('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">Siguiente</button></div>
+  </div>`;
+  populateReclassSubcategories(currentCat,currentSub);
+}
+function confirmReclassifyExpense(gastoItemId, originalCategoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){toast('No se encontró el gasto seleccionado.');return;}
+  const newCatId=String($('#reclassCategory')?.value||'');
+  const newSubId=String($('#reclassSubcategory')?.value||'');
+  const cat=(centralCatalog()?.categorias||[]).find(c=>String(c.id)===newCatId);
+  const sub=(centralCatalog()?.subcategorias||[]).find(s=>String(s.id)===newSubId);
+  if(!cat||!sub){alert('Selecciona una categoría y una subcategoría.');return;}
+  if(String(sub.categoria_id)!==String(cat.id)){alert('La subcategoría seleccionada no pertenece a esa categoría.');return;}
+  const oldCat=r.categoria||'—', oldSub=r.subcategoria||'—';
+  const newCat=centralCategoryDisplayName(cat), newSub=centralSubcategoryDisplayName(sub);
+  if(String(r.categoria_id)===newCatId && String(r.subcategoria_id)===newSubId){toast('El gasto ya tiene esa clasificación.');return;}
+  $('#modal').innerHTML=`<div class="expense-reclassify-modal">
+    <div class="expense-detail-head"><div><div class="category-detail-kicker">CONFIRMAR CAMBIO</div><h3>Confirmar reclasificación</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openReclassifyExpense('${escAttr(gastoItemId)}','${escAttr(originalCategoryId)}')">×</button></div>
+    <p class="reclass-question">¿Confirmas la reclasificación de este gasto?</p>
+    <div class="expense-detail-card"><div><span>Fecha</span><strong>${esc(formatDetailDateFull(r.fecha))}</strong></div><div><span>Descripción</span><strong>${esc(r.descripcion||r.detalle||r.concepto||'Gasto')}</strong></div><div><span>Valor</span><strong>${money(Number(r.monto||0))}</strong></div><div><span>Categoría actual</span><strong>${esc(oldCat)} → ${esc(oldSub)}</strong></div><div><span>Nueva categoría</span><strong>${esc(newCat)} → ${esc(newSub)}</strong></div></div>
+    <div class="reclass-info">Este cambio se guardará en D1 y actualizará la clasificación del gasto. El registro, fecha y valor se conservan.</div>
+    <div class="form-actions"><button type="button" class="secondary-btn" onclick="openReclassifyExpense('${escAttr(gastoItemId)}','${escAttr(originalCategoryId)}')">Cancelar</button><button type="button" class="primary-btn" onclick="saveReclassifiedExpense('${escAttr(gastoItemId)}','${escAttr(originalCategoryId)}','${escAttr(newCatId)}','${escAttr(newSubId)}')">Confirmar cambio</button></div>
+  </div>`;
+}
+async function saveReclassifiedExpense(gastoItemId, originalCategoryId, newCatId, newSubId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){toast('No se encontró el gasto seleccionado.');return;}
+  try{
+    await writePhase3Resource('/presupuesto/gastos/reclasificar','POST',{gasto_item_id:r.gasto_item_id,categoria_id:newCatId,subcategoria_id:newSubId,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    const month=currentMonth;
+    const apiUrl=String(DEFAULT_GASTOS_IA_WORKER||'').replace(/\/$/,'');
+    // Actualizamos solo los valores que no fueron editados manualmente.
+    const res=await fetch(`${apiUrl}/presupuesto/gastos?mes=${encodeURIComponent(month)}`,{cache:'no-store'});
+    const data=await res.json().catch(()=>null);
+    if(res.ok&&data?.ok){
+      for(const row of (data.subcategorias||[])){
+        const sid=String(row.subcategoria_id||'');
+        if(!sid)continue;
+        const key=centralExpenseKey(month,sid);
+        if(state.centralExpenseImported?.[key]!=='manual') setCentralExpenseValue(month,sid,parseD1Money(row.total),'d1');
+      }
+      centralLatestExpenseDate=data?.ultima_fecha_gasto||centralLatestExpenseDate;
+      save();
+    }
+    toast('Gasto reclasificado correctamente');
+    await openCategoryDetail(originalCategoryId);
+  }catch(err){alert(`No se pudo reclasificar el gasto.\n\n${err.message||err}`);}
 }
 function formatDetailDate(value){
   const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -1694,7 +1811,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;
 
 boot();

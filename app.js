@@ -566,7 +566,11 @@ function bindEvents() {
   document.addEventListener('click',handleChartClick);
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
-  $('#expenseBudgetsBtn').onclick=openExpenseBudgets;
+  const expenseBudgetsBtn=$('#expenseBudgetsBtn');
+  if(expenseBudgetsBtn){
+    expenseBudgetsBtn.onclick=(e)=>{e.preventDefault();e.stopPropagation();window.openExpenseBudgets();};
+    expenseBudgetsBtn.addEventListener('click',(e)=>{e.preventDefault();e.stopImmediatePropagation();window.openExpenseBudgets();},{capture:true});
+  }
   $('#toggleSavingsOrganize').onclick=toggleSavingsOrganize;
   $('#toggleIncomeOrganize').onclick=toggleIncomeOrganize;
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
@@ -1898,6 +1902,6 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;
+window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 boot();

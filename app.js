@@ -1026,6 +1026,7 @@ async function openCategoryDetail(categoryId){
     modal.innerHTML=`<div class="category-detail-modal">
       <div class="category-detail-head"><div><div class="category-detail-kicker">GASTOS DIARIOS</div><h3>${esc(catName)}</h3><div class="category-detail-month">${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="closeModal()">×</button></div>
       <div class="category-detail-total"><span>Total de la categoría</span><strong>${money(total)}</strong></div>
+      ${expenseBudgetBarHTML(categoryId,total,month)}
       <div class="category-detail-list">${body}</div>
     </div>`;
   }catch(err){
@@ -1170,7 +1171,7 @@ function categoryBudgetInfo(categoryId,spent,month=currentMonth){
   if(!(limit>0)) return {budget,limit:0,spent,percent:0,remaining:0,income};
   const percent=(spent/limit)*100;
   const remaining=limit-spent;
-  const tone=percent<=70?'good':percent<=90?'warning':'danger';
+  const tone=percent<=80?'good':percent<=100?'warning':'danger';
   return {budget,limit,spent,percent,remaining,income,tone};
 }
 function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
@@ -1179,13 +1180,10 @@ function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
   const width=Math.min(100,Math.max(0,info.percent));
   const pct=Math.round(info.percent);
   const detail=info.remaining>=0?`Te quedan ${money(info.remaining)}`:`Te pasaste ${money(Math.abs(info.remaining))}`;
-  const limitText=info.budget.type==='percent'
-    ? `Límite del mes ${money(info.limit)} · ${formatNumber(info.budget.value)}% de ingresos`
-    : `Límite del mes ${money(info.limit)}`;
   return `<div class="expense-budget-box ${info.tone}">
-    <div class="expense-budget-text"><span>${limitText}</span><strong>${pct}%</strong></div>
+    <div class="expense-budget-text"><span>Límite: ${money(info.limit)}</span><strong>${pct}%</strong></div>
     <div class="expense-budget-track" role="progressbar" aria-label="Uso del límite de ${pct}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,pct)}"><div class="expense-budget-fill" style="width:${width}%"></div></div>
-    <div class="expense-budget-foot"><span>${detail}</span><span>${money(info.limit)}</span></div>
+    <div class="expense-budget-foot"><span>${detail}</span></div>
   </div>`;
 }
 function openExpenseBudgets(){
@@ -1254,7 +1252,6 @@ function renderExpenses(){
             <button class="order-text-btn" title="Mover categoría abajo" aria-label="Mover categoría abajo" data-action="move-central-category-down" data-category-id="${escAttr(cat.id)}" ${catIndex<groups.length-1?'':'disabled'}>↓</button>
           </div>
         </div>
-        ${expenseBudgetBarHTML(cat.id,catTotal,currentMonth)}
         <div class="category-items">${cat.subcategorias.map((sub,subIndex)=>{const val=getCentralExpenseValue(currentMonth,sub.id);const source=state.centralExpenseImported?.[centralExpenseKey(currentMonth,sub.id)]; const edited=source==='manual'; return `<div class="expense-item central-expense-item ${edited?'is-edited':''}">
           <div class="row-top"><div class="row-title"><strong>${esc(sub.displayName||sub.nombre)}</strong>${edited?'<small class="source-badge edited-badge">✏️ Editado</small>':(source==='d1'?'<small class="source-badge d1-source-badge">☁️ D1</small>':'')}</div><div class="row-actions organize-only"><button class="small-icon category-edit-btn organize-only" title="Editar nombre de subcategoría" aria-label="Editar nombre de subcategoría" data-action="edit-central-subcategory" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}">✏️</button><button class="order-text-btn" title="Mover subcategoría arriba" aria-label="Mover subcategoría arriba" data-action="move-central-subcategory-up" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex>0?'':'disabled'}>↑</button><button class="order-text-btn" title="Mover subcategoría abajo" aria-label="Mover subcategoría abajo" data-action="move-central-subcategory-down" data-category-id="${escAttr(cat.id)}" data-subcategory-id="${escAttr(sub.id)}" ${subIndex<cat.subcategorias.length-1?'':'disabled'}>↓</button></div></div>
           <div class="central-value-wrap"><input class="value-input" inputmode="numeric" aria-label="${esc(sub.displayName||sub.nombre)}" value="${val?formatNumber(val):''}" placeholder="$ 0" onchange="updateCentralExpense('${escAttr(sub.id)}', this.value)"></div>

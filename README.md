@@ -151,3 +151,7 @@ V67: corrigió el desplegable de Notas de Análisis con estado explícito y agre
 - Notas de Inicio: mantienen máximo 3 por mes.
 - Gráficos de línea: área táctil transparente y amplia, sin círculos negros visibles; interacción por toque conservada.
 - Ejes de gráficos en móvil: tipografía ligeramente mayor y más legible.
+
+
+## V82 – Barra de límite visible en detalle
+La barra de límite mensual se muestra siempre dentro del detalle diario de la categoría. Si aún no existe un límite para esa categoría, se muestra un estado neutral ‘Sin definir’ con acceso directo a la configuración de límites.

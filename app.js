@@ -1176,7 +1176,13 @@ function categoryBudgetInfo(categoryId,spent,month=currentMonth){
 }
 function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
   const info=categoryBudgetInfo(categoryId,spent,month);
-  if(!info || !(info.limit>0)) return '';
+  if(!info || !(info.limit>0)){
+    return `<div class="expense-budget-box no-budget">
+      <div class="expense-budget-text"><span>Límite del mes</span><strong>Sin definir</strong></div>
+      <div class="expense-budget-track empty"><div class="expense-budget-fill" style="width:0%"></div></div>
+      <div class="expense-budget-foot"><span>Esta categoría no tiene un límite configurado.</span><button type="button" class="expense-budget-config" onclick="openExpenseBudgets()">Definir límite</button></div>
+    </div>`;
+  }
   const width=Math.min(100,Math.max(0,info.percent));
   const pct=Math.round(info.percent);
   const detail=info.remaining>=0?`Te quedan ${money(info.remaining)}`:`Te pasaste ${money(Math.abs(info.remaining))}`;

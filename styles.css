@@ -297,6 +297,8 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .expense-budget-text strong{font-size:12px;color:var(--navy)}
 .expense-budget-track{height:7px;margin:7px 0 5px;border-radius:999px;background:#e7e7ec;overflow:hidden}
 .expense-budget-fill{height:100%;border-radius:999px;background:#2e8b65;transition:width .2s ease}
+
+.expense-budget-box.no-budget{background:#fafafd}.expense-budget-track.empty{background:#e9e9ee}.expense-budget-box.no-budget .expense-budget-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}.expense-budget-config{border:0;background:transparent;color:var(--purple);font-size:10px;font-weight:900;padding:2px 0;cursor:pointer;white-space:nowrap}
 .expense-budget-box.warning .expense-budget-fill{background:#c99a3d}
 .expense-budget-box.danger .expense-budget-fill{background:#c85454}
 .expense-budget-box.warning .expense-budget-text strong{color:#8b6a1c}

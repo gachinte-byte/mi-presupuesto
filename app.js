@@ -1218,6 +1218,22 @@ function budgetAllocationFromForm(){
   const distributed=rows.reduce((sum,r)=>sum+r.pct,0);
   return {income,rows,distributed,available:Math.max(0,100-distributed),distributedAmount:rows.reduce((sum,r)=>sum+r.amount,0)};
 }
+function updateBudgetCategorySpentLimitsUI(){
+  const income=monthlyIncomeTotal(currentMonth);
+  $$('.budget-setting-row[data-budget-row-category]').forEach(row=>{
+    const catId=String(row.dataset.budgetRowCategory||'');
+    if(!catId || catId==='__savings__') return;
+    const catSubs=(centralCatalog()?.subcategorias||[]).filter(sub=>Number(sub.activa??1)!==0 && String(sub.categoria_id)===catId);
+    const spent=catSubs.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
+    const sel=row.querySelector('.budget-type');
+    const input=row.querySelector('.budget-value');
+    const type=sel?.value==='fixed'?'fixed':'percent';
+    const value=numberValue(input?.value||0);
+    const limit=value>0 ? (type==='percent' ? income*(value/100) : value) : 0;
+    const head=row.querySelector('.budget-setting-head span');
+    if(head) head.textContent=limit>0 ? `Gastado: ${money(spent)} / Límite: ${money(limit)}` : `Gastado: ${money(spent)} / Límite: Sin definir`;
+  });
+}
 function updateBudgetAllocationUI(){
   const info=budgetAllocationFromForm();
   // Cada fila solo puede usar el porcentaje que queda disponible después de las demás.
@@ -1251,6 +1267,7 @@ function updateBudgetAllocationUI(){
     }
   }
   const finalInfo=budgetAllocationFromForm();
+  updateBudgetCategorySpentLimitsUI();
   const summary=$('#budgetAllocationSummary');
   if(summary){
     const dp=finalInfo.income>0?Math.round(finalInfo.distributed*100)/100:0;
@@ -1276,7 +1293,7 @@ function openExpenseBudgets(focusCategoryId=''){
     const catSubs=subs.filter(sub=>String(sub.categoria_id)===String(cat.id));
     const spent=catSubs.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
     return `<div class="budget-setting-row" data-budget-row-category="${escAttr(cat.id)}">
-      <div class="budget-setting-head"><strong>${esc(centralCategoryDisplayName(cat))}</strong><span>Gastado: ${money(spent)}</span></div>
+      <div class="budget-setting-head"><strong>${esc(centralCategoryDisplayName(cat))}</strong><span>Gastado: ${money(spent)} / Límite: Sin definir</span></div>
       <div class="budget-setting-controls">
         <select class="select budget-type" data-budget-category="${escAttr(cat.id)}">
           <option value="percent" ${b.type==='percent'?'selected':''}>% de ingresos</option>

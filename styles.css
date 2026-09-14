@@ -377,3 +377,8 @@ body.income-organizing .income-data-row{background:#faf9fc}
   .budget-allocation-summary strong{font-size:10px}
   .budget-bottom .form-actions{margin-top:6px}
 }
+
+/* V87 - gasto real y límite calculado visibles en la misma fila de cada categoría */
+.budget-setting-head span{font-size:9.5px;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.budget-setting-head strong{min-width:0;flex:1}
+@media(max-width:430px){.budget-setting-head{gap:6px}.budget-setting-head span{font-size:9px;max-width:58%;letter-spacing:-.01em}}

@@ -357,3 +357,23 @@ body.income-organizing .income-data-row{background:#faf9fc}
   #view-expenses .page-title-row .title-actions{gap:4px}
   #view-expenses .page-title-row .title-actions button{padding:7px 8px!important;font-size:10px!important;border-radius:9px!important}
 }
+
+
+/* V86 - presupuesto de distribución 100% con ahorro opcional y resumen fijo */
+.budget-modal-host .budget-modal{display:flex;flex-direction:column;min-height:0;height:min(88vh,760px);max-height:88vh;overflow:hidden}
+.budget-modal-host .budget-income-note{flex:0 0 auto;margin:10px 0 6px}
+.budget-modal-host .budget-setting-list{flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;padding-right:4px;-webkit-overflow-scrolling:touch}
+.budget-savings-row{background:#faf9fd;border-radius:10px;padding:10px 0!important}
+.budget-allocation-summary{flex:0 0 auto;margin-top:8px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#f3f2f6;color:var(--purple);display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;font-size:11px;line-height:1.2}
+.budget-allocation-summary strong{font-size:11px;color:var(--navy)}
+.budget-allocation-summary.is-complete{background:#f0faf5;border-color:#cfe7da}
+.budget-bottom{flex:0 0 auto;padding-top:4px;background:var(--card)}
+.budget-bottom .form-actions{margin-top:7px;padding-bottom:calc(2px + env(safe-area-inset-bottom))}
+@media(max-width:520px){
+  .modal.budget-modal-host{height:88dvh;max-height:88dvh;min-height:0;overflow:hidden}
+  .budget-modal-host .budget-modal{height:100%;max-height:none}
+  .budget-modal-host .budget-setting-list{padding-right:1px}
+  .budget-allocation-summary{font-size:10px;padding:8px 6px;gap:4px}
+  .budget-allocation-summary strong{font-size:10px}
+  .budget-bottom .form-actions{margin-top:6px}
+}

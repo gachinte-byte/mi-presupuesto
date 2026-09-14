@@ -1196,6 +1196,69 @@ function expenseBudgetBarHTML(categoryId,spent,month=currentMonth){
     <div class="expense-budget-foot"><span>${detail}</span></div>
   </div>`;
 }
+function budgetAllocationFromForm(){
+  const income=monthlyIncomeTotal(currentMonth);
+  const rows=[];
+  const savingsType=document.querySelector('.budget-savings-type')?.value==='percent'?'percent':'fixed';
+  const savingsValue=numberValue(document.querySelector('.budget-savings-value')?.value||0);
+  if(savingsValue>0){
+    const amount=savingsType==='percent'?income*(savingsValue/100):savingsValue;
+    rows.push({id:'__savings__',type:savingsType,value:savingsValue,pct:income>0?amount/income*100:0,amount});
+  }
+  $$('.budget-type').forEach(sel=>{
+    const catId=String(sel.dataset.budgetCategory||'');
+    if(!catId)return;
+    const input=document.querySelector(`.budget-value[data-budget-category="${CSS.escape(catId)}"]`);
+    const value=numberValue(input?.value||0);
+    if(!(value>0))return;
+    const type=sel.value==='percent'?'percent':'fixed';
+    const amount=type==='percent'?income*(value/100):value;
+    rows.push({id:catId,type,value,pct:income>0?amount/income*100:0,amount});
+  });
+  const distributed=rows.reduce((sum,r)=>sum+r.pct,0);
+  return {income,rows,distributed,available:Math.max(0,100-distributed),distributedAmount:rows.reduce((sum,r)=>sum+r.amount,0)};
+}
+function updateBudgetAllocationUI(){
+  const info=budgetAllocationFromForm();
+  // Cada fila solo puede usar el porcentaje que queda disponible después de las demás.
+  const income=info.income;
+  const controls=[];
+  const savingsInput=document.querySelector('.budget-savings-value');
+  const savingsType=document.querySelector('.budget-savings-type');
+  if(savingsInput&&savingsType)controls.push({input:savingsInput,select:savingsType});
+  $$('.budget-type').forEach(sel=>{
+    const catId=String(sel.dataset.budgetCategory||'');
+    const input=document.querySelector(`.budget-value[data-budget-category="${CSS.escape(catId)}"]`);
+    if(input)controls.push({input,select:sel});
+  });
+  for(const current of controls){
+    const currentValue=numberValue(current.input.value||0);
+    const currentType=current.select.value==='percent'?'percent':'fixed';
+    let othersPct=0;
+    for(const other of controls){
+      if(other===current)continue;
+      const value=numberValue(other.input.value||0);
+      if(!(value>0))continue;
+      const type=other.select.value==='percent'?'percent':'fixed';
+      othersPct += income>0 ? (type==='percent'?value:(value/income*100)) : (type==='percent'?value:0);
+    }
+    const maxPct=Math.max(0,100-othersPct);
+    const maxValue=currentType==='percent'?maxPct:(income>0?income*maxPct/100:0);
+    current.input.max=String(Math.max(0,maxValue));
+    if(currentType==='percent')current.input.min='0';
+    if(currentValue>maxValue+0.0001){
+      current.input.value=maxValue>0?(currentType==='percent'?String(Math.round(maxValue*100)/100):formatNumber(maxValue)):'0';
+    }
+  }
+  const finalInfo=budgetAllocationFromForm();
+  const summary=$('#budgetAllocationSummary');
+  if(summary){
+    const dp=finalInfo.income>0?Math.round(finalInfo.distributed*100)/100:0;
+    const ap=finalInfo.income>0?Math.max(0,Math.round(finalInfo.available*100)/100):0;
+    summary.innerHTML=`<strong>Distribuido: ${dp}% (${money(finalInfo.distributedAmount)})</strong><span>·</span><strong>Disponible: ${ap}% (${money(finalInfo.income-finalInfo.distributedAmount)})</strong>`;
+    summary.classList.toggle('is-complete',finalInfo.distributed>=99.999);
+  }
+}
 function openExpenseBudgets(focusCategoryId=''){
   const modalEl=$('#modal');
   if(!modalEl)return;
@@ -1205,40 +1268,65 @@ function openExpenseBudgets(focusCategoryId=''){
   const cats=(catalog?.categorias||[]).filter(cat=>Number(cat.activa??1)!==0);
   const subs=(catalog?.subcategorias||[]).filter(sub=>Number(sub.activa??1)!==0);
   const income=monthlyIncomeTotal(currentMonth);
+  const savings=state.expenseBudgets?.__savings__||null;
+  const savingsType=savings?.type==='percent'?'percent':'fixed';
+  const savingsValue=Number(savings?.value||0);
   const rows=cats.map(cat=>{
-    const b=expenseBudgetForCategory(cat.id)||{type:'fixed',value:''};
-    // El catálogo D1 guarda las subcategorías en una lista plana; se filtran
-    // por categoria_id para calcular correctamente lo gastado.
+    const b=expenseBudgetForCategory(cat.id)||{type:'percent',value:''};
     const catSubs=subs.filter(sub=>String(sub.categoria_id)===String(cat.id));
     const spent=catSubs.reduce((sum,sub)=>sum+getCentralExpenseValue(currentMonth,sub.id),0);
     return `<div class="budget-setting-row" data-budget-row-category="${escAttr(cat.id)}">
       <div class="budget-setting-head"><strong>${esc(centralCategoryDisplayName(cat))}</strong><span>Gastado: ${money(spent)}</span></div>
       <div class="budget-setting-controls">
         <select class="select budget-type" data-budget-category="${escAttr(cat.id)}">
-          <option value="fixed" ${b.type==='fixed'?'selected':''}>Monto fijo</option>
           <option value="percent" ${b.type==='percent'?'selected':''}>% de ingresos</option>
+          <option value="fixed" ${b.type==='fixed'?'selected':''}>Monto fijo</option>
         </select>
-        <input class="input number-format budget-value" data-budget-category="${escAttr(cat.id)}" inputmode="decimal" placeholder="0" value="${b.value?formatNumber(b.value):''}">
+        <input class="input number-format budget-value" data-budget-category="${escAttr(cat.id)}" inputmode="decimal" min="0" placeholder="0" value="${b.value?formatNumber(b.value):''}">
       </div>
     </div>`;
   }).join('');
   modalEl.innerHTML=`<div class="budget-modal">
     <div class="modal-title-row"><div><div class="category-detail-kicker">GASTOS</div><h3>Límites de gastos</h3></div><button class="modal-close" type="button" onclick="closeModal()" aria-label="Cerrar">×</button></div>
-    <p class="helper">Define un límite mensual por categoría. Es local en este dispositivo y no modifica D1.</p>
     <div class="budget-income-note">Ingresos de ${esc(monthLabel(currentMonth))}: <strong>${money(income)}</strong></div>
-    <div class="budget-setting-list">${rows||'<div class="empty">No hay categorías activas.</div>'}</div>
-    <div class="form-actions"><button class="secondary-btn" type="button" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="button" onclick="saveExpenseBudgets()">Guardar límites</button></div>
+    <div class="budget-setting-list">
+      <div class="budget-setting-row budget-savings-row" data-budget-row-category="__savings__">
+        <div class="budget-setting-head"><strong>💰 Ahorro</strong><span>Parte del 100%</span></div>
+        <div class="budget-setting-controls">
+          <select class="select budget-savings-type">
+            <option value="percent" ${savingsType==='percent'?'selected':''}>% de ingresos</option>
+            <option value="fixed" ${savingsType==='fixed'?'selected':''}>Monto fijo</option>
+          </select>
+          <input class="input number-format budget-savings-value" inputmode="decimal" min="0" placeholder="0" value="${savingsValue?formatNumber(savingsValue):''}">
+        </div>
+      </div>
+      ${rows||'<div class="empty">No hay categorías activas.</div>'}
+    </div>
+    <div class="budget-bottom">
+      <div id="budgetAllocationSummary" class="budget-allocation-summary" aria-live="polite"></div>
+      <div class="form-actions"><button class="secondary-btn" type="button" onclick="closeModal()">Cancelar</button><button class="primary-btn" type="button" onclick="saveExpenseBudgets()">Guardar límites</button></div>
+    </div>
   </div>`;
   const backdrop=$('#modalBackdrop');
   backdrop?.classList.remove('hidden');
+  const sync=()=>updateBudgetAllocationUI();
+  $$('.budget-type,.budget-savings-type').forEach(el=>el.addEventListener('change',sync));
+  $$('.budget-value,.budget-savings-value').forEach(el=>el.addEventListener('input',sync));
+  sync();
   if(focusCategoryId){
-    const row=modalEl.querySelector(`[data-budget-row-category=\"${CSS.escape(String(focusCategoryId))}\"]`);
+    const row=modalEl.querySelector(`[data-budget-row-category="${CSS.escape(String(focusCategoryId))}"]`);
     row?.scrollIntoView({block:'center',behavior:'auto'});
     row?.querySelector('.budget-value')?.focus({preventScroll:true});
   }
 }
 function saveExpenseBudgets(){
+  const info=budgetAllocationFromForm();
+  if(info.distributed>100.0001){alert('La distribución no puede superar el 100% de los ingresos.');updateBudgetAllocationUI();return;}
   state.expenseBudgets ||= {};
+  const savingsType=document.querySelector('.budget-savings-type')?.value==='percent'?'percent':'fixed';
+  const savingsValue=numberValue(document.querySelector('.budget-savings-value')?.value||0);
+  if(savingsValue>0)state.expenseBudgets.__savings__={type:savingsType,value:savingsValue};
+  else delete state.expenseBudgets.__savings__;
   $$('.budget-type').forEach(sel=>{
     const catId=String(sel.dataset.budgetCategory||'');
     const input=document.querySelector(`.budget-value[data-budget-category="${CSS.escape(catId)}"]`);

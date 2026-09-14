@@ -158,3 +158,10 @@ La barra de límite mensual se muestra siempre dentro del detalle diario de la c
 
 
 V83: límites configurables con modal independiente y configuración con scroll independiente en móvil; controles superiores de Gastos compactos.
+
+
+## V86 - Distribución 100%
+- Ahorro opcional como primera asignación.
+- Porcentajes y montos fijos comparten un máximo del 100% de los ingresos.
+- Resumen fijo: Distribuido / Disponible.
+- Sin cambios en Worker ni D1.

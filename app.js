@@ -1374,7 +1374,7 @@ async function fetchSmsPending(){
       headers:{'Accept':'application/json',...(smsKey?{'X-Presupuesto-SMS-Key':smsKey}:{'X-Presupuesto-Write-Key':key})},cache:'no-store'
     });
     const data=await res.json().catch(()=>null);
-    if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+    if(!res.ok||!data?.ok) throw new Error(`${res.status}${data?.error?': '+data.error:''}`);
     if(rid!==smsPendingRequestId)return smsPendingCache;
     smsPendingCache=Array.isArray(data.pendientes)?data.pendientes:[];
     return smsPendingCache;
@@ -1386,20 +1386,23 @@ async function fetchSmsPending(){
 }
 let smsPendingLastError='';
 function smsPendingCardHTML(){
-  if(!smsPendingCache.length)return '';
-  const total=smsPendingCache.reduce((s,x)=>s+Number(x.monto||0),0);
-  return `<button type="button" class="sms-pending-banner" onclick="openSmsPendingModal()">
-    <span class="sms-pending-icon">🟠</span><span><strong>${smsPendingCache.length} ${smsPendingCache.length===1?'gasto pendiente':'gastos pendientes'}</strong><small>Compras recibidas por SMS · ${money(total)}</small></span><span class="sms-pending-arrow">›</span>
-  </button>`;
+  if(smsPendingCache.length){
+    const total=smsPendingCache.reduce((s,x)=>s+Number(x.monto||0),0);
+    return `<button type="button" class="sms-pending-banner" onclick="openSmsPendingModal()">
+      <span class="sms-pending-icon">🟠</span><span><strong>${smsPendingCache.length} ${smsPendingCache.length===1?'gasto pendiente':'gastos pendientes'}</strong><small>Compras recibidas por SMS · ${money(total)}</small></span><span class="sms-pending-arrow">›</span>
+    </button>`;
+  }
+  if(smsPendingLastError){
+    return `<div class="sms-pending-error">⚠️ Pendientes SMS: ${esc(smsPendingLastError)} <button type="button" onclick="refreshSmsPendingUI()">Reintentar</button></div>`;
+  }
+  return '';
 }
 async function refreshSmsPendingUI(){
   smsPendingLastError='';
-  await fetchSmsPending();
   const el=$('#smsPendingBanner');
+  if(el) el.innerHTML='<div class="sms-pending-loading">Consultando gastos pendientes por SMS…</div>';
+  await fetchSmsPending();
   if(el) el.innerHTML=smsPendingCardHTML();
-  if(el && !smsPendingCache.length && smsPendingLastError){
-    el.innerHTML=`<div class="sms-pending-error">⚠️ No se pudieron consultar los pendientes SMS. <button type="button" onclick="refreshSmsPendingUI()">Reintentar</button></div>`;
-  }
 }
 function openSmsPendingModal(){
   const modalEl=$('#modal'); if(!modalEl)return;
@@ -2100,7 +2103,7 @@ function openSettings(){
   <details class="settings-advanced"><summary>Configuración avanzada</summary>
   <div class="form-field"><label>Clave de escritura D1</label><input id="presupuestoWriteKey" class="input" type="password" value="${escAttr(state.settings.presupuestoWriteKey||'')}" placeholder="PRESUPUESTO_WRITE_KEY"><p class="helper">Se guarda solo en este dispositivo y se usa para guardar Ahorros e Ingresos en D1. No la publiques en GitHub.</p></div>
   <button class="secondary-btn" onclick="savePresupuestoWriteKey()">Guardar clave de escritura</button>
-  <div class="form-field"><label>Clave SMS Banco</label><input id="presupuestoSmsKey" class="input" type="password" value="${escAttr(state.settings.presupuestoSmsKey||'')}" placeholder="PRESUPUESTO_SMS_KEY"><p class="helper">Clave independiente para leer y gestionar los pendientes recibidos por SMS. Se guarda solo en este dispositivo.</p></div>
+  <div class="form-field"><label>Clave SMS Banco</label><input id="presupuestoSmsKey" class="input" type="password" value="${escAttr(state.settings.presupuestoSmsKey||'')}" placeholder="PRESUPUESTO_SMS_KEY"><p class="helper">Clave independiente para leer y gestionar los pendientes recibidos por SMS. Se guarda solo en este dispositivo.</p><button type="button" class="secondary-btn" onclick="testSmsConnection()">🔎 Probar conexión SMS</button><div id="smsConnectionStatus" class="helper" style="margin-top:7px"></div></div>
   <button class="secondary-btn" onclick="savePresupuestoSmsKey()">Guardar clave SMS</button>
   <div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
   </div>
@@ -2118,6 +2121,19 @@ function savePresupuestoWriteKey(){
   save();
   toast(state.settings.presupuestoWriteKey?'Clave de escritura guardada en este dispositivo':'Clave de escritura eliminada');
 }
+async function testSmsConnection(){
+  smsPendingLastError='';
+  const el=$('#smsConnectionStatus');
+  if(el) el.textContent='Probando conexión…';
+  await fetchSmsPending();
+  if(el){
+    if(smsPendingLastError) el.textContent=`❌ Error: ${smsPendingLastError}`;
+    else el.textContent=`✅ Conexión correcta · ${smsPendingCache.length} pendiente${smsPendingCache.length===1?'':'s'}`;
+  }
+  const banner=$('#smsPendingBanner');
+  if(banner) banner.innerHTML=smsPendingCardHTML();
+}
+
 function savePresupuestoSmsKey(){
   state.settings.presupuestoSmsKey=String($('#presupuestoSmsKey')?.value||'').trim();
   save();
@@ -2138,7 +2154,7 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.openSmsPendingModal=openSmsPendingModal;window.savePresupuestoSmsKey=savePresupuestoSmsKey;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
+window.openSmsPendingModal=openSmsPendingModal;window.testSmsConnection=testSmsConnection;window.savePresupuestoSmsKey=savePresupuestoSmsKey;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 // V85: controles críticos independientes del resto de bindEvents().
 // Esto evita que un fallo en otro listener deje sin respuesta Límites o Configuración.

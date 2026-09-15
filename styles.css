@@ -382,3 +382,12 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .budget-setting-head span{font-size:9.5px;color:var(--muted);font-weight:600;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .budget-setting-head strong{min-width:0;flex:1}
 @media(max-width:430px){.budget-setting-head{gap:6px}.budget-setting-head span{font-size:9px;max-width:58%;letter-spacing:-.01em}}
+
+/* SMS Banco -> pendientes: compacto y separado del resto */
+.sms-pending-banner{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #f0c98a;background:#fff9ef;border-radius:14px;padding:10px 12px;margin:0 0 10px;color:#343047}
+.sms-pending-icon{font-size:18px;flex:0 0 auto}.sms-pending-banner span:nth-child(2){flex:1;display:flex;flex-direction:column;gap:2px}.sms-pending-banner strong{font-size:14px}.sms-pending-banner small{font-size:12px;color:#716d80}.sms-pending-arrow{font-size:24px;line-height:1}
+.sms-pending-modal{height:min(78dvh,720px);display:flex;flex-direction:column;overflow:hidden;background:#fff;border-radius:24px;padding:18px}
+.sms-pending-list{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 0}
+.sms-pending-row{width:100%;display:flex;justify-content:space-between;gap:12px;text-align:left;border:0;border-bottom:1px solid #ececf1;background:transparent;padding:14px 4px;color:#343047}
+.sms-pending-row>div{display:flex;flex-direction:column;gap:4px;min-width:0}.sms-pending-row strong:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sms-pending-row small{color:#777487}.sms-pending-amount{font-size:28px;font-weight:800;margin:12px 0}.sms-pending-meta{padding:10px 12px;background:#f6f5f8;border-radius:12px;margin-bottom:14px}.sms-pending-modal .form-label{display:block;font-weight:700;margin:10px 0}.sms-pending-modal .form-label select{display:block;width:100%;margin-top:6px}.sms-pending-reject{border:0;background:transparent;color:#c62828;font-weight:700;padding:12px}
+@media(max-width:699px){.sms-pending-modal{height:78dvh;padding:16px;border-radius:24px}.sms-pending-banner{margin-bottom:8px}}

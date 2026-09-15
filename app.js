@@ -723,6 +723,7 @@ async function changeMonth(delta){
   // La consulta de la última fecha es independiente de Ahorros/Ingresos.
   // Se lanza siempre al cambiar de mes y se protege contra respuestas tardías.
   await syncLatestExpenseDate(monthForRequest);
+  await refreshSmsPendingUI();
   render();
   updateVisibleMonthLabels();
 }
@@ -1355,6 +1356,89 @@ function saveExpenseBudgets(){
   save(); closeModal(); renderExpenses(); toast('Límites guardados');
 }
 
+let smsPendingCache = [];
+let smsPendingRequestId = 0;
+
+async function fetchSmsPending(month=currentMonth){
+  const apiUrl=String(state?.settings?.catalogApiUrl||DEFAULT_GASTOS_IA_WORKER||'').trim().replace(/\/$/,'');
+  const key=String(state?.settings?.presupuestoWriteKey||'').trim();
+  if(!apiUrl||!key) return [];
+  const rid=++smsPendingRequestId;
+  try{
+    const res=await fetch(`${apiUrl}/presupuesto/sms/pendientes?mes=${encodeURIComponent(month)}`,{
+      headers:{'Accept':'application/json','X-Presupuesto-Write-Key':key},cache:'no-store'
+    });
+    const data=await res.json().catch(()=>null);
+    if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+    if(rid!==smsPendingRequestId||month!==currentMonth)return smsPendingCache;
+    smsPendingCache=Array.isArray(data.pendientes)?data.pendientes:[];
+    return smsPendingCache;
+  }catch(err){
+    console.warn('No se pudieron cargar pendientes SMS:',err);
+    return smsPendingCache;
+  }
+}
+function smsPendingCardHTML(){
+  if(!smsPendingCache.length)return '';
+  const total=smsPendingCache.reduce((s,x)=>s+Number(x.monto||0),0);
+  return `<button type="button" class="sms-pending-banner" onclick="openSmsPendingModal()">
+    <span class="sms-pending-icon">🟠</span><span><strong>${smsPendingCache.length} ${smsPendingCache.length===1?'gasto pendiente':'gastos pendientes'}</strong><small>Compras recibidas por SMS · ${money(total)}</small></span><span class="sms-pending-arrow">›</span>
+  </button>`;
+}
+async function refreshSmsPendingUI(){
+  await fetchSmsPending(currentMonth);
+  const el=$('#smsPendingBanner'); if(el) el.innerHTML=smsPendingCardHTML();
+}
+function openSmsPendingModal(){
+  const modalEl=$('#modal'); if(!modalEl)return;
+  modalEl.classList.remove('settings-modal-host','budget-modal-host');
+  const rows=smsPendingCache.map(p=>`<button type="button" class="sms-pending-row" onclick="openSmsPendingDetail('${escAttr(p.id)}')">
+    <div><strong>${esc(p.comercio||p.descripcion||'Compra con tarjeta')}</strong><small>${esc(formatDetailDate(p.fecha))}${p.tarjeta_ultimos4?' · TC '+esc(p.tarjeta_ultimos4):''}</small></div><strong>${money(p.monto)}</strong>
+  </button>`).join('');
+  modalEl.innerHTML=`<div class="sms-pending-modal"><div class="modal-title-row"><div><div class="category-detail-kicker">BANCO</div><h3>Gastos pendientes</h3></div><button class="modal-close" type="button" onclick="closeModal()">×</button></div><div class="sms-pending-list">${rows||'<div class="empty">No hay pendientes.</div>'}</div></div>`;
+  $('#modalBackdrop')?.classList.remove('hidden');
+}
+function openSmsPendingDetail(id){
+  const p=smsPendingCache.find(x=>String(x.id)===String(id)); if(!p)return;
+  const catalog=centralCatalog(); const cats=(catalog?.categorias||[]).filter(c=>Number(c.activa??1)!==0);
+  const subs=(catalog?.subcategorias||[]).filter(s=>Number(s.activa??1)!==0);
+  const catOptions=cats.map(c=>`<option value="${escAttr(c.id)}">${esc(c.nombre)}</option>`).join('');
+  const subForFirst=subs.filter(s=>String(s.categoria_id)===String(cats[0]?.id));
+  const subOptions=subForFirst.map(s=>`<option value="${escAttr(s.id)}">${esc(s.nombre)}</option>`).join('');
+  const modalEl=$('#modal'); if(!modalEl)return;
+  modalEl.innerHTML=`<div class="sms-pending-modal"><div class="modal-title-row"><div><div class="category-detail-kicker">REVISAR COMPRA</div><h3>${esc(p.comercio||p.descripcion||'Compra con tarjeta')}</h3><div class="category-detail-month">${esc(formatDetailDate(p.fecha))} · ${esc(p.tarjeta_ultimos4?'TC '+p.tarjeta_ultimos4:'SMS')}</div></div><button class="modal-close" type="button" onclick="openSmsPendingModal()">×</button></div>
+    <div class="sms-pending-amount">${money(p.monto)}</div>
+    <div class="sms-pending-meta">${esc(p.descripcion||'Compra recibida por SMS')}</div>
+    <label class="form-label">Categoría<select id="smsPendingCat" class="select" onchange="updateSmsPendingSubs()">${catOptions}</select></label>
+    <label class="form-label">Subcategoría<select id="smsPendingSub" class="select">${subOptions}</select></label>
+    <div class="form-actions"><button class="secondary-btn" type="button" onclick="openSmsPendingModal()">Volver</button><button class="primary-btn" type="button" onclick="confirmSmsPending('${escAttr(p.id)}')">Confirmar gasto</button></div>
+    <button type="button" class="sms-pending-reject" onclick="rejectSmsPending('${escAttr(p.id)}')">Descartar</button>
+  </div>`;
+}
+function updateSmsPendingSubs(){
+  const catId=String($('#smsPendingCat')?.value||'');
+  const sel=$('#smsPendingSub'); if(!sel)return;
+  const subs=(centralCatalog()?.subcategorias||[]).filter(s=>String(s.categoria_id)===catId && Number(s.activa??1)!==0);
+  sel.innerHTML=subs.map(s=>`<option value="${escAttr(s.id)}">${esc(s.nombre)}</option>`).join('');
+}
+async function confirmSmsPending(id){
+  const catId=String($('#smsPendingCat')?.value||'').trim(), subId=String($('#smsPendingSub')?.value||'').trim();
+  if(!catId||!subId){alert('Selecciona categoría y subcategoría.');return;}
+  try{
+    await writePhase3Resource('/presupuesto/sms/pendientes/confirmar','POST',{id,categoria_id:catId,subcategoria_id:subId,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    smsPendingCache=smsPendingCache.filter(x=>String(x.id)!==String(id));
+    closeModal(); await syncCentralExpenseValues(currentMonth); renderExpenses(); refreshSmsPendingUI(); toast('Gasto SMS confirmado');
+  }catch(err){alert(`No se pudo confirmar el gasto SMS.\n\n${err.message||err}`);}
+}
+async function rejectSmsPending(id){
+  if(!confirm('¿Descartar esta compra pendiente?'))return;
+  try{
+    await writePhase3Resource('/presupuesto/sms/pendientes/rechazar','POST',{id});
+    smsPendingCache=smsPendingCache.filter(x=>String(x.id)!==String(id));
+    openSmsPendingModal(); refreshSmsPendingUI(); toast('Pendiente descartado');
+  }catch(err){alert(`No se pudo descartar el pendiente.\n\n${err.message||err}`);}
+}
+
 function renderExpenses(){
   const central=centralCatalogMode();
   updateLatestExpenseInfo();
@@ -1372,7 +1456,7 @@ function renderExpenses(){
   const wrap=$('#expenseRows');
   if(central){
     const groups=centralExpenseGroups();
-    wrap.innerHTML=`<div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
+    wrap.innerHTML=`<div id="smsPendingBanner">${smsPendingCardHTML()}</div><div class="central-expense-sync"><button class="secondary-btn" onclick="syncCentralExpenseValues('${currentMonth}')">↻ Actualizar desde D1</button></div>` +
       (groups.map((cat,catIndex)=>{const catTotal=cat.subcategorias.reduce((s,sub)=>s+getCentralExpenseValue(currentMonth,sub.id),0);return `<section class="expense-category-card central-catalog-card">
         <div class="category-header">
           <div class="category-heading-info"><div class="category-title-row"><div class="category-title">${esc(cat.displayName||cat.nombre)}</div><button class="category-detail-arrow" type="button" title="Ver gastos diarios de ${escAttr(cat.displayName||cat.nombre)}" aria-label="Ver gastos diarios de ${escAttr(cat.displayName||cat.nombre)}" onclick="openCategoryDetail('${escAttr(cat.id)}')"><span aria-hidden="true">›</span></button></div><div class="category-total">${money(catTotal)}</div></div>
@@ -2018,7 +2102,7 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
+window.openSmsPendingModal=openSmsPendingModal;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 // V85: controles críticos independientes del resto de bindEvents().
 // Esto evita que un fallo en otro listener deje sin respuesta Límites o Configuración.
@@ -2039,3 +2123,4 @@ document.addEventListener('click',e=>{
 },{capture:true});
 
 boot();
+setTimeout(()=>refreshSmsPendingUI(),700);

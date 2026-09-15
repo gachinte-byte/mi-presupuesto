@@ -66,6 +66,7 @@ function normalize(data) {
   data.settings ||= { usdToCop: 4000 };
   data.settings.catalogApiUrl ||= DEFAULT_GASTOS_IA_WORKER;
   data.settings.presupuestoWriteKey ||= '';
+  data.settings.presupuestoSmsKey ||= '';
   data.phase3SavingsCatalog ||= null;
   data.phase3IncomeCatalog ||= null;
   data.centralCatalog ||= null;
@@ -1361,12 +1362,14 @@ let smsPendingRequestId = 0;
 
 async function fetchSmsPending(month=currentMonth){
   const apiUrl=String(state?.settings?.catalogApiUrl||DEFAULT_GASTOS_IA_WORKER||'').trim().replace(/\/$/,'');
-  const key=String(state?.settings?.presupuestoWriteKey||'').trim();
+  const smsKey=String(state?.settings?.presupuestoSmsKey||'').trim();
+  const writeKey=String(state?.settings?.presupuestoWriteKey||'').trim();
+  const key=smsKey||writeKey;
   if(!apiUrl||!key) return [];
   const rid=++smsPendingRequestId;
   try{
     const res=await fetch(`${apiUrl}/presupuesto/sms/pendientes?mes=${encodeURIComponent(month)}`,{
-      headers:{'Accept':'application/json','X-Presupuesto-Write-Key':key},cache:'no-store'
+      headers:{'Accept':'application/json',...(smsKey?{'X-Presupuesto-SMS-Key':smsKey}:{'X-Presupuesto-Write-Key':key})},cache:'no-store'
     });
     const data=await res.json().catch(()=>null);
     if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
@@ -2072,6 +2075,8 @@ function openSettings(){
   <details class="settings-advanced"><summary>Configuración avanzada</summary>
   <div class="form-field"><label>Clave de escritura D1</label><input id="presupuestoWriteKey" class="input" type="password" value="${escAttr(state.settings.presupuestoWriteKey||'')}" placeholder="PRESUPUESTO_WRITE_KEY"><p class="helper">Se guarda solo en este dispositivo y se usa para guardar Ahorros e Ingresos en D1. No la publiques en GitHub.</p></div>
   <button class="secondary-btn" onclick="savePresupuestoWriteKey()">Guardar clave de escritura</button>
+  <div class="form-field"><label>Clave SMS Banco</label><input id="presupuestoSmsKey" class="input" type="password" value="${escAttr(state.settings.presupuestoSmsKey||'')}" placeholder="PRESUPUESTO_SMS_KEY"><p class="helper">Clave independiente para leer y gestionar los pendientes recibidos por SMS. Se guarda solo en este dispositivo.</p></div>
+  <button class="secondary-btn" onclick="savePresupuestoSmsKey()">Guardar clave SMS</button>
   <div class="form-field"><label>Chat ID de Telegram <span class="optional-label">opcional</span></label><input id="catalogChatId" class="input" inputmode="numeric" value="${escAttr(chatId)}" placeholder="Vacío = único chat"><p class="helper">Solo úsalo si D1 tiene más de un chat.</p></div><button type="button" class="secondary-btn" onclick="resetCentralDisplayNames()">Restablecer nombres oficiales</button></details>
   </div>
   <div class="settings-block"><strong>📊 Excel</strong><p class="helper">Exporta un mes para revisarlo o modificar sus valores.</p><div class="form-field"><label>Mes a exportar</label><input id="excelMonth" class="input" type="month" value="${escAttr(currentMonth)}"></div><button class="primary-btn" onclick="exportExcel(document.getElementById('excelMonth').value)">📊 Exportar mes a Excel</button><button onclick="document.getElementById('excelImportFile').click()">📥 Importar Excel modificado</button><input id="excelImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none"></div>
@@ -2088,6 +2093,12 @@ function savePresupuestoWriteKey(){
   save();
   toast(state.settings.presupuestoWriteKey?'Clave de escritura guardada en este dispositivo':'Clave de escritura eliminada');
 }
+function savePresupuestoSmsKey(){
+  state.settings.presupuestoSmsKey=String($('#presupuestoSmsKey')?.value||'').trim();
+  save();
+  toast(state.settings.presupuestoSmsKey?'Clave SMS guardada en este dispositivo':'Clave SMS eliminada');
+  refreshSmsPendingUI();
+}
 function saveRate(){state.settings.usdToCop=numberValue($('#usdRate').value)||4000;save();closeModal();render();toast('Tasa guardada');}
 function exportJSON(){const payload=JSON.stringify(state,null,2);const blob=new Blob([payload],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`mi-presupuesto-${currentMonth}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),500);toast('JSON exportado');}
 function importJSON(file){const reader=new FileReader();reader.onload=()=>{try{state=normalize(JSON.parse(reader.result));currentMonth=state.currentMonth||currentMonth;analyticsYear=Number(currentMonth.slice(0,4));autoCarryJanuarySavings();save();closeModal();render();toast('Datos importados correctamente');}catch{alert('El archivo no parece ser un JSON válido de Mi Presupuesto.');}};reader.readAsText(file);}
@@ -2102,7 +2113,7 @@ window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncom
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
 window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
-window.openSmsPendingModal=openSmsPendingModal;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
+window.openSmsPendingModal=openSmsPendingModal;window.savePresupuestoSmsKey=savePresupuestoSmsKey;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 // V85: controles críticos independientes del resto de bindEvents().
 // Esto evita que un fallo en otro listener deje sin respuesta Límites o Configuración.

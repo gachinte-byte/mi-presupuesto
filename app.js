@@ -1360,7 +1360,7 @@ function saveExpenseBudgets(){
 let smsPendingCache = [];
 let smsPendingRequestId = 0;
 
-async function fetchSmsPending(month=currentMonth){
+async function fetchSmsPending(){
   const apiUrl=String(state?.settings?.catalogApiUrl||DEFAULT_GASTOS_IA_WORKER||'').trim().replace(/\/$/,'');
   const smsKey=String(state?.settings?.presupuestoSmsKey||'').trim();
   const writeKey=String(state?.settings?.presupuestoWriteKey||'').trim();
@@ -1368,19 +1368,23 @@ async function fetchSmsPending(month=currentMonth){
   if(!apiUrl||!key) return [];
   const rid=++smsPendingRequestId;
   try{
-    const res=await fetch(`${apiUrl}/presupuesto/sms/pendientes?mes=${encodeURIComponent(month)}`,{
+    // Los pendientes son una bandeja de revisión y no deben depender del mes
+    // que el usuario tenga seleccionado en Presupuesto.
+    const res=await fetch(`${apiUrl}/presupuesto/sms/pendientes`,{
       headers:{'Accept':'application/json',...(smsKey?{'X-Presupuesto-SMS-Key':smsKey}:{'X-Presupuesto-Write-Key':key})},cache:'no-store'
     });
     const data=await res.json().catch(()=>null);
     if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
-    if(rid!==smsPendingRequestId||month!==currentMonth)return smsPendingCache;
+    if(rid!==smsPendingRequestId)return smsPendingCache;
     smsPendingCache=Array.isArray(data.pendientes)?data.pendientes:[];
     return smsPendingCache;
   }catch(err){
     console.warn('No se pudieron cargar pendientes SMS:',err);
+    smsPendingLastError=err?.message||String(err);
     return smsPendingCache;
   }
 }
+let smsPendingLastError='';
 function smsPendingCardHTML(){
   if(!smsPendingCache.length)return '';
   const total=smsPendingCache.reduce((s,x)=>s+Number(x.monto||0),0);
@@ -1389,8 +1393,13 @@ function smsPendingCardHTML(){
   </button>`;
 }
 async function refreshSmsPendingUI(){
-  await fetchSmsPending(currentMonth);
-  const el=$('#smsPendingBanner'); if(el) el.innerHTML=smsPendingCardHTML();
+  smsPendingLastError='';
+  await fetchSmsPending();
+  const el=$('#smsPendingBanner');
+  if(el) el.innerHTML=smsPendingCardHTML();
+  if(el && !smsPendingCache.length && smsPendingLastError){
+    el.innerHTML=`<div class="sms-pending-error">⚠️ No se pudieron consultar los pendientes SMS. <button type="button" onclick="refreshSmsPendingUI()">Reintentar</button></div>`;
+  }
 }
 function openSmsPendingModal(){
   const modalEl=$('#modal'); if(!modalEl)return;
@@ -1424,11 +1433,27 @@ function updateSmsPendingSubs(){
   const subs=(centralCatalog()?.subcategorias||[]).filter(s=>String(s.categoria_id)===catId && Number(s.activa??1)!==0);
   sel.innerHTML=subs.map(s=>`<option value="${escAttr(s.id)}">${esc(s.nombre)}</option>`).join('');
 }
+async function writeSmsResource(path, method, body=null){
+  const apiUrl=String(state?.settings?.catalogApiUrl||DEFAULT_GASTOS_IA_WORKER||'').trim().replace(/\/$/,'');
+  const smsKey=String(state?.settings?.presupuestoSmsKey||'').trim();
+  const writeKey=String(state?.settings?.presupuestoWriteKey||'').trim();
+  const key=smsKey||writeKey;
+  if(!apiUrl) throw new Error('No hay URL del Worker configurada.');
+  if(!key) throw new Error('Falta configurar la clave SMS en Configuración.');
+  const headers={'Content-Type':'application/json',...(smsKey?{'X-Presupuesto-SMS-Key':smsKey}:{'X-Presupuesto-Write-Key':writeKey})};
+  const opts={method,headers};
+  if(body!==null) opts.body=JSON.stringify(body);
+  const res=await fetch(`${apiUrl}${path}`,opts);
+  const data=await res.json().catch(()=>null);
+  if(!res.ok||!data?.ok) throw new Error(data?.error||`HTTP ${res.status}`);
+  return data;
+}
+
 async function confirmSmsPending(id){
   const catId=String($('#smsPendingCat')?.value||'').trim(), subId=String($('#smsPendingSub')?.value||'').trim();
   if(!catId||!subId){alert('Selecciona categoría y subcategoría.');return;}
   try{
-    await writePhase3Resource('/presupuesto/sms/pendientes/confirmar','POST',{id,categoria_id:catId,subcategoria_id:subId,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    await writeSmsResource('/presupuesto/sms/pendientes/confirmar','POST',{id,categoria_id:catId,subcategoria_id:subId,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
     smsPendingCache=smsPendingCache.filter(x=>String(x.id)!==String(id));
     closeModal(); await syncCentralExpenseValues(currentMonth); renderExpenses(); refreshSmsPendingUI(); toast('Gasto SMS confirmado');
   }catch(err){alert(`No se pudo confirmar el gasto SMS.\n\n${err.message||err}`);}
@@ -1436,7 +1461,7 @@ async function confirmSmsPending(id){
 async function rejectSmsPending(id){
   if(!confirm('¿Descartar esta compra pendiente?'))return;
   try{
-    await writePhase3Resource('/presupuesto/sms/pendientes/rechazar','POST',{id});
+    await writeSmsResource('/presupuesto/sms/pendientes/rechazar','POST',{id});
     smsPendingCache=smsPendingCache.filter(x=>String(x.id)!==String(id));
     openSmsPendingModal(); refreshSmsPendingUI(); toast('Pendiente descartado');
   }catch(err){alert(`No se pudo descartar el pendiente.\n\n${err.message||err}`);}

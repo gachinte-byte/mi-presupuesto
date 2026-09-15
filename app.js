@@ -1424,6 +1424,7 @@ function openSmsPendingDetail(id){
   modalEl.innerHTML=`<div class="sms-pending-modal"><div class="modal-title-row"><div><div class="category-detail-kicker">REVISAR COMPRA</div><h3>${esc(p.comercio||p.descripcion||'Compra con tarjeta')}</h3><div class="category-detail-month">${esc(formatDetailDate(p.fecha))} · ${esc(p.tarjeta_ultimos4?'TC '+p.tarjeta_ultimos4:'SMS')}</div></div><button class="modal-close" type="button" onclick="openSmsPendingModal()">×</button></div>
     <div class="sms-pending-amount">${money(p.monto)}</div>
     <div class="sms-pending-meta">${esc(p.descripcion||'Compra recibida por SMS')}</div>
+    <label class="form-label">Descripción <span style="font-weight:400;opacity:.65">(opcional)</span><input id="smsPendingDesc" class="text-input" type="text" maxlength="180" placeholder="Ej. Compra mercado casa"></label>
     <label class="form-label">Categoría<select id="smsPendingCat" class="select" onchange="updateSmsPendingSubs()">${catOptions}</select></label>
     <label class="form-label">Subcategoría<select id="smsPendingSub" class="select">${subOptions}</select></label>
     <div class="form-actions"><button class="secondary-btn" type="button" onclick="openSmsPendingModal()">Volver</button><button class="primary-btn" type="button" onclick="confirmSmsPending('${escAttr(p.id)}')">Confirmar gasto</button></div>
@@ -1454,9 +1455,10 @@ async function writeSmsResource(path, method, body=null){
 
 async function confirmSmsPending(id){
   const catId=String($('#smsPendingCat')?.value||'').trim(), subId=String($('#smsPendingSub')?.value||'').trim();
+  const descripcion=String($('#smsPendingDesc')?.value||'').trim().slice(0,180);
   if(!catId||!subId){alert('Selecciona categoría y subcategoría.');return;}
   try{
-    await writeSmsResource('/presupuesto/sms/pendientes/confirmar','POST',{id,categoria_id:catId,subcategoria_id:subId,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    await writeSmsResource('/presupuesto/sms/pendientes/confirmar','POST',{id,categoria_id:catId,subcategoria_id:subId,descripcion,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
     smsPendingCache=smsPendingCache.filter(x=>String(x.id)!==String(id));
     closeModal(); await syncCentralExpenseValues(currentMonth); renderExpenses(); refreshSmsPendingUI(); toast('Gasto SMS confirmado');
   }catch(err){alert(`No se pudo confirmar el gasto SMS.\n\n${err.message||err}`);}

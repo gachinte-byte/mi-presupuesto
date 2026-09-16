@@ -1072,10 +1072,51 @@ async function openExpenseDetail(gastoItemId, categoryId){
         <div><span>Subcategoría actual</span><strong>${esc(centralSubcategoryDisplayName(sub)||r.subcategoria||'—')}</strong></div>
       </div>
       <button type="button" class="primary-btn expense-reclassify-btn" onclick="openReclassifyExpense('${escAttr(r.gasto_item_id)}','${escAttr(categoryId)}')">✏️ Cambiar clasificación</button>
+      <button type="button" class="danger-btn expense-delete-btn" onclick="openDeleteExpense('${escAttr(r.gasto_item_id)}','${escAttr(categoryId)}')">🗑️ Eliminar gasto</button>
       <button type="button" class="secondary-btn expense-close-btn" onclick="openCategoryDetail('${escAttr(categoryId)}')">Cerrar</button>
     </div>`;
   }catch(err){
     modal.innerHTML=`<div class="expense-detail-modal"><div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>No se pudo cargar</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div><div class="category-detail-error">${esc(err?.message||'Error de conexión')}</div></div>`;
+  }
+}
+
+function openDeleteExpense(gastoItemId, categoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){
+    toast('No se encontró el gasto seleccionado.');
+    return;
+  }
+  const desc=r.descripcion||r.detalle||r.concepto||r.comercio||'Gasto';
+  $('#modal').innerHTML=`<div class="expense-reclassify-modal expense-delete-confirm-modal">
+    <div class="expense-detail-head"><div><div class="category-detail-kicker">ELIMINAR GASTO</div><h3>¿Eliminar este gasto?</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openExpenseDetail('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">×</button></div>
+    <div class="reclass-expense-summary"><strong>${esc(r.comercio||desc)}</strong><span>${esc(formatDetailDateFull(r.fecha))} · ${money(Number(r.monto||0))}</span></div>
+    <div class="expense-detail-card"><div><span>Descripción</span><strong>${esc(desc)}</strong></div><div><span>Categoría</span><strong>${esc(r.categoria||'—')} → ${esc(r.subcategoria||'—')}</strong></div><div><span>Comercio</span><strong>${esc(r.comercio||'—')}</strong></div></div>
+    <div class="delete-warning">⚠️ Este gasto se eliminará completamente de la base de datos. También se eliminarán sus movimientos asociados. Esta acción no se puede deshacer.</div>
+    <div class="form-actions"><button type="button" class="secondary-btn" onclick="openExpenseDetail('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">Cancelar</button><button type="button" class="danger-btn" onclick="confirmDeleteExpense('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">Eliminar definitivamente</button></div>
+  </div>`;
+}
+
+async function confirmDeleteExpense(gastoItemId, categoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){
+    toast('No se encontró el gasto seleccionado.');
+    return;
+  }
+  const btns=document.querySelectorAll('.expense-delete-confirm-modal button');
+  btns.forEach(b=>b.disabled=true);
+  try{
+    const data=await writePhase3Resource('/presupuesto/gastos/eliminar','POST',{gasto_item_id:r.gasto_item_id,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    window.__selectedExpenseDetail=null;
+    closeModal();
+    await syncCentralExpenseValues(currentMonth);
+    await syncLatestExpenseDate(currentMonth);
+    renderExpenses();
+    if(typeof renderAnalytics==='function') renderAnalytics();
+    if(typeof refreshSmsPendingUI==='function') refreshSmsPendingUI();
+    toast(data?.message||'Gasto eliminado correctamente');
+  }catch(err){
+    btns.forEach(b=>b.disabled=false);
+    alert(`No se pudo eliminar el gasto.\n\n${err.message||err}`);
   }
 }
 
@@ -2155,7 +2196,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openDeleteExpense=openDeleteExpense;window.confirmDeleteExpense=confirmDeleteExpense;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.openSmsPendingModal=openSmsPendingModal;window.testSmsConnection=testSmsConnection;window.savePresupuestoSmsKey=savePresupuestoSmsKey;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 // V85: controles críticos independientes del resto de bindEvents().

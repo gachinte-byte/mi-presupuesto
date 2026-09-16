@@ -394,3 +394,11 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .sms-pending-loading{width:100%;box-sizing:border-box;border:1px solid #d9dbe3;background:#f7f8fb;color:#5d5a6d;border-radius:12px;padding:9px 11px;margin:0 0 10px;font-size:12px}.sms-pending-error{width:100%;box-sizing:border-box;border:1px solid #f0c98a;background:#fff9ef;color:#7a5a18;border-radius:12px;padding:9px 11px;margin:0 0 10px;font-size:12px}.sms-pending-error button{border:0;background:transparent;text-decoration:underline;font-weight:700;padding:0 0 0 5px;color:inherit}
 
 .sms-pending-modal .input{display:block;width:100%;box-sizing:border-box;margin-top:6px;}
+
+/* V94 - eliminación segura desde el detalle del gasto */
+.danger-btn{width:100%;min-height:44px;border:0;border-radius:12px;background:var(--red);color:#fff;font:inherit;font-weight:850;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.danger-btn:active{transform:scale(.99);filter:brightness(.96)}
+.danger-btn:disabled{opacity:.6;cursor:wait}
+.expense-delete-btn{margin-top:0}
+.delete-warning{padding:11px 12px;border-radius:12px;background:#fff4f3;color:#8a2d2a;border:1px solid #f0c9c6;font-size:11px;line-height:1.45;font-weight:700}
+.expense-delete-confirm-modal .expense-detail-card>div:nth-child(2) strong{font-size:12px}

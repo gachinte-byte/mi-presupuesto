@@ -890,7 +890,25 @@ function renderHome(){
   const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
   $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);
   $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
-  const cats=categoryTotals(),max=cats[0]?.[1]||1;$('#homeExpenseList').innerHTML=cats.map(([name,v])=>`<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="category-bar"><span style="width:${Math.round(v/max*100)}%"></span></div></div><div class="category-value">${money(v)}</div></div>`).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
+  const cats=categoryTotals();
+  const homeCats=centralCatalogMode() ? (centralCatalog()?.categorias||[]) : [];
+  const findHomeCatId=(name)=>{ const n=String(name||'').trim().toLowerCase(); const c=homeCats.find(x=>String(centralCategoryDisplayName(x)||x.nombre||'').trim().toLowerCase()===n || String(x.nombre||'').trim().toLowerCase()===n); return c?.id||''; };
+  const max=cats[0]?.[1]||1;
+  $('#homeExpenseList').innerHTML=cats.map(([name,v])=>{
+    const categoryId=findHomeCatId(name);
+    const info=categoryId?categoryBudgetInfo(categoryId,v,currentMonth):null;
+    let barClass='category-bar'; let width=Math.round(v/max*100); let aria='Gasto relativo del mes';
+    if(info && info.limit>0){
+      width=Math.min(100,Math.max(0,info.percent));
+      barClass+=` home-limit-bar ${info.tone}`;
+      aria=`Uso del límite: ${Math.round(info.percent)}%`;
+    }else if(categoryId){
+      barClass+=' home-limit-bar no-limit';
+      width=0;
+      aria='Sin límite configurado';
+    }
+    return `<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="${barClass}" role="progressbar" aria-label="${escAttr(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,Math.round(width))}"><span style="width:${width}%"></span></div></div><div class="category-value">${money(v)}</div></div>`;
+  }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
   const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=orderedAssetCategories().flatMap(cat=>orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean)).filter(x=>x.homeVisible===true);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${savingsCategoryDisplayName(x.category)}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';
 }
 function miniRow(a,b){return `<div class="mini-row"><span>${esc(a)}</span><strong>${b}</strong></div>`;}

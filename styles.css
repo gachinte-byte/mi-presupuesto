@@ -403,3 +403,12 @@ body.income-organizing .income-data-row{background:#faf9fc}
 .expense-delete-btn{margin-top:0}
 .delete-warning{padding:11px 12px;border-radius:12px;background:#fff4f3;color:#8a2d2a;border:1px solid #f0c9c6;font-size:11px;line-height:1.45;font-weight:700}
 .expense-delete-confirm-modal .expense-detail-card>div:nth-child(2) strong{font-size:12px}
+
+/* Inicio: barras de gasto contra el límite configurado */
+.category-bar.home-limit-bar{height:6px;background:#eeeaf2;overflow:hidden}
+.category-bar.home-limit-bar span{transition:width .25s ease}
+.category-bar.home-limit-bar.good span{background:var(--green)}
+.category-bar.home-limit-bar.warning span{background:var(--gold)}
+.category-bar.home-limit-bar.danger span{background:var(--red)}
+.category-bar.home-limit-bar.no-limit span{background:#d8d5de}
+@media(max-width:430px){.category-bar.home-limit-bar{height:6px}}

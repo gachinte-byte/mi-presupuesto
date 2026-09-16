@@ -1064,7 +1064,7 @@ async function openExpenseDetail(gastoItemId, categoryId){
       <div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>${esc(desc)}</h3><div class="category-detail-month">${esc(formatDetailDate(r.fecha))} · ${esc(monthLabel(month))}</div></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div>
       <div class="expense-detail-card">
         <div><span>Fecha</span><strong>${esc(formatDetailDateFull(r.fecha))}</strong></div>
-        <div><span>Descripción</span><strong>${esc(desc)}</strong></div>
+        <div class="expense-description-row"><span>Descripción</span><div class="expense-description-value"><strong id="expenseDescriptionValue">${esc(desc)}</strong><button type="button" class="expense-description-edit" title="Editar descripción" aria-label="Editar descripción" onclick="editExpenseDescription('${escAttr(r.gasto_item_id)}','${escAttr(categoryId)}')">✏️</button></div></div>
         <div><span>Valor</span><strong>${money(Number(r.monto||0))}</strong></div>
         <div><span>Comercio</span><strong>${esc(r.comercio||'—')}</strong></div>
         <div><span>Forma de pago</span><strong>${esc(r.forma_pago||'—')}</strong></div>
@@ -1077,6 +1077,37 @@ async function openExpenseDetail(gastoItemId, categoryId){
     </div>`;
   }catch(err){
     modal.innerHTML=`<div class="expense-detail-modal"><div class="expense-detail-head"><div><div class="category-detail-kicker">DETALLE DEL GASTO</div><h3>No se pudo cargar</h3></div><button type="button" class="category-detail-close" aria-label="Cerrar" onclick="openCategoryDetail('${escAttr(categoryId)}')">×</button></div><div class="category-detail-error">${esc(err?.message||'Error de conexión')}</div></div>`;
+  }
+}
+
+function editExpenseDescription(gastoItemId, categoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){toast('No se encontró el gasto seleccionado.');return;}
+  const value=String(r.concepto||r.descripcion||r.detalle||r.comercio||'Gasto');
+  const row=document.querySelector('.expense-description-row');
+  if(!row)return;
+  row.innerHTML=`<span>Descripción</span><div class="expense-description-editor"><input id="expenseDescriptionInput" class="expense-description-input" type="text" maxlength="180" value="${escAttr(value)}" aria-label="Descripción del gasto"><button type="button" class="expense-description-save" title="Guardar descripción" aria-label="Guardar descripción" onclick="saveExpenseDescription('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">✓</button><button type="button" class="expense-description-cancel" title="Cancelar edición" aria-label="Cancelar edición" onclick="openExpenseDetail('${escAttr(gastoItemId)}','${escAttr(categoryId)}')">×</button></div>`;
+  const input=$('#expenseDescriptionInput');
+  if(input){input.focus(); input.select(); input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveExpenseDescription(gastoItemId,categoryId);} if(e.key==='Escape'){e.preventDefault();openExpenseDetail(gastoItemId,categoryId);}});}
+}
+
+async function saveExpenseDescription(gastoItemId, categoryId){
+  const r=window.__selectedExpenseDetail;
+  if(!r || String(r.gasto_item_id)!==String(gastoItemId)){toast('No se encontró el gasto seleccionado.');return;}
+  const input=$('#expenseDescriptionInput');
+  const descripcion=String(input?.value||'').trim().slice(0,180);
+  if(!descripcion){alert('La descripción no puede quedar vacía.'); input?.focus(); return;}
+  const saveBtn=document.querySelector('.expense-description-save');
+  if(saveBtn)saveBtn.disabled=true;
+  try{
+    const data=await writePhase3Resource('/presupuesto/gastos/descripcion','POST',{gasto_item_id:r.gasto_item_id,descripcion,chat_id:String(state.settings.catalogChatId||'').trim()||undefined});
+    r.concepto=descripcion;
+    r.descripcion=descripcion;
+    toast(data?.message||'Descripción actualizada correctamente');
+    await openExpenseDetail(gastoItemId,categoryId);
+  }catch(err){
+    if(saveBtn)saveBtn.disabled=false;
+    alert(`No se pudo actualizar la descripción.\n\n${err.message||err}`);
   }
 }
 
@@ -2196,7 +2227,7 @@ function registerSW(){if('serviceWorker' in navigator && location.protocol!=='fi
 window.updateIncome=updateIncome;window.editIncome=editIncome;window.deleteIncome=deleteIncome;
 window.updateExpense=updateExpense;window.editExpense=editExpense;window.editCategory=editCategory;window.deleteExpense=deleteExpense;window.openAddExpense=openAddExpense;
 window.updateAsset=updateAsset;window.editAsset=editAsset;window.deleteAsset=deleteAsset;
-window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.openDeleteExpense=openDeleteExpense;window.confirmDeleteExpense=confirmDeleteExpense;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
+window.closeModal=closeModal;window.openCategoryDetail=openCategoryDetail;window.openExpenseDetail=openExpenseDetail;window.editExpenseDescription=editExpenseDescription;window.saveExpenseDescription=saveExpenseDescription;window.openDeleteExpense=openDeleteExpense;window.confirmDeleteExpense=confirmDeleteExpense;window.openReclassifyExpense=openReclassifyExpense;window.populateReclassSubcategories=populateReclassSubcategories;window.confirmReclassifyExpense=confirmReclassifyExpense;window.saveReclassifiedExpense=saveReclassifiedExpense;window.exportJSON=exportJSON;window.importJSON=importJSON;window.exportExcel=exportExcel;window.importExcel=importExcel;window.resetLocal=resetLocal;window.saveRate=saveRate;
 window.openSmsPendingModal=openSmsPendingModal;window.testSmsConnection=testSmsConnection;window.savePresupuestoSmsKey=savePresupuestoSmsKey;window.openSmsPendingDetail=openSmsPendingDetail;window.updateSmsPendingSubs=updateSmsPendingSubs;window.confirmSmsPending=confirmSmsPending;window.rejectSmsPending=rejectSmsPending;window.refreshSmsPendingUI=refreshSmsPendingUI;window.copyPreviousSavings=copyPreviousSavings;window.toggleExpenseOrganize=toggleExpenseOrganize;window.toggleIncomeOrganize=toggleIncomeOrganize;window.openExpenseBudgets=openExpenseBudgets;window.saveExpenseBudgets=saveExpenseBudgets;
 
 // V85: controles críticos independientes del resto de bindEvents().

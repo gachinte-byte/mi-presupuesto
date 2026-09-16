@@ -930,7 +930,12 @@ function homeSavingsGroupMeta(key){
   return map[key]||{label:key,icon:'•',cls:'other'};
 }
 function homeSavingsAmount(x){
-  return x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth));
+  const value=getMonthValue(x,currentMonth);
+  if(x.currency==='USD'){
+    const rate=Number(state.settings.usdToCop||4000);
+    return `<span class="home-asset-money"><strong>${money(value,'USD')}</strong><small>(${money(value*rate)})</small></span>`;
+  }
+  return money(value);
 }
 function homeSavingsGroups(){
   const visible=state.assetItems.filter(x=>x.homeVisible===true);
@@ -942,8 +947,12 @@ function homeSavingsGroups(){
 function homeSavingsGroupTotal(items){
   const cop=items.reduce((sum,x)=>sum+(x.currency==='USD'?0:Number(getMonthValue(x,currentMonth)||0)),0);
   if(cop>0)return money(cop);
-  const usd=items.reduce((sum,x)=>sum+(x.currency==='USD'?Number(x.monthly[currentMonth]||0):0),0);
-  return usd?money(usd,'USD'):'$ 0';
+  const usd=items.reduce((sum,x)=>sum+(x.currency==='USD'?Number(getMonthValue(x,currentMonth)||0):0),0);
+  if(usd){
+    const rate=Number(state.settings.usdToCop||4000);
+    return `<span class="home-asset-money"><strong>${money(usd,'USD')}</strong><small>(${money(usd*rate)})</small></span>`;
+  }
+  return '$ 0';
 }
 function toggleHomeSavingsGroup(key){
   state.homeSavingsCollapsed ||= {};

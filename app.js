@@ -909,7 +909,58 @@ function renderHome(){
     }
     return `<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="${barClass}" role="progressbar" aria-label="${escAttr(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,Math.round(width))}"><span style="width:${width}%"></span></div></div><div class="category-value">${money(v)}</div></div>`;
   }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
-  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);const assetRows=orderedAssetCategories().flatMap(cat=>orderedAssetSubcategories(cat).map(name=>state.assetItems.find(x=>x.category===cat&&x.name===name)).filter(Boolean)).filter(x=>x.homeVisible===true);$('#homeSavingsList').innerHTML=assetRows.map(x=>miniRow(`${x.name} · ${savingsCategoryDisplayName(x.category)}`,x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';
+  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);renderHomeSavingsGroups();
+}
+function homeSavingsGroupKey(category){
+  const c=String(category||'').trim().toUpperCase();
+  if(c==='DÓLARES'||c==='DOLARES') return 'INVERSIONES';
+  if(c.includes('CDT')) return 'CDTS';
+  if(c.includes('FIDU')) return 'FIDUCUENTAS';
+  if(c==='AHORROS') return 'AHORROS';
+  if(c==='INVERSIONES') return 'INVERSIONES';
+  return String(category||'OTROS').trim();
+}
+function homeSavingsGroupMeta(key){
+  const map={
+    'CDTS':{label:'CDTs',icon:'▣',cls:'cdt'},
+    'FIDUCUENTAS':{label:'Fiducuentas',icon:'◉',cls:'fidu'},
+    'AHORROS':{label:'Ahorros',icon:'♧',cls:'ahorro'},
+    'INVERSIONES':{label:'Inversiones',icon:'◇',cls:'inversion'}
+  };
+  return map[key]||{label:key,icon:'•',cls:'other'};
+}
+function homeSavingsAmount(x){
+  return x.currency==='USD'?money(x.monthly[currentMonth],'USD'):money(getMonthValue(x,currentMonth));
+}
+function homeSavingsGroups(){
+  const visible=state.assetItems.filter(x=>x.homeVisible===true);
+  const order=['CDTS','FIDUCUENTAS','AHORROS','INVERSIONES'];
+  const groups={};
+  visible.forEach(x=>{const key=homeSavingsGroupKey(x.category);(groups[key] ||= []).push(x);});
+  return order.filter(k=>groups[k]?.length).map(key=>({key,items:groups[key]})).concat(Object.keys(groups).filter(k=>!order.includes(k)).map(key=>({key,items:groups[key]})));
+}
+function homeSavingsGroupTotal(items){
+  const cop=items.reduce((sum,x)=>sum+(x.currency==='USD'?0:Number(getMonthValue(x,currentMonth)||0)),0);
+  if(cop>0)return money(cop);
+  const usd=items.reduce((sum,x)=>sum+(x.currency==='USD'?Number(x.monthly[currentMonth]||0):0),0);
+  return usd?money(usd,'USD'):'$ 0';
+}
+function toggleHomeSavingsGroup(key){
+  state.homeSavingsCollapsed ||= {};
+  state.homeSavingsCollapsed[key]=!state.homeSavingsCollapsed[key];
+  save();renderHomeSavingsGroups();
+}
+function renderHomeSavingsGroups(){
+  const wrap=$('#homeSavingsList'); if(!wrap)return;
+  const groups=homeSavingsGroups();
+  if(!groups.length){wrap.innerHTML='<div class="empty">Selecciona las cuentas que quieras monitorear en Inicio desde Ahorros.</div>';return;}
+  wrap.innerHTML=groups.map(g=>{
+    const meta=homeSavingsGroupMeta(g.key);
+    const collapsed=state.homeSavingsCollapsed?.[g.key]===true;
+    const total=homeSavingsGroupTotal(g.items);
+    const rows=collapsed?'':g.items.map(x=>`<div class="home-asset-row"><span>${esc(x.name)}</span><strong>${homeSavingsAmount(x)}</strong></div>`).join('');
+    return `<section class="home-asset-group ${meta.cls} ${collapsed?'is-collapsed':''}"><button type="button" class="home-asset-group-head" onclick="toggleHomeSavingsGroup('${escAttr(g.key)}')"><span class="home-asset-icon">${meta.icon}</span><span class="home-asset-group-title">${esc(meta.label)}</span><strong class="home-asset-group-total">${total}</strong><span class="home-asset-caret">${collapsed?'⌄':'⌃'}</span></button><div class="home-asset-group-items">${rows}</div></section>`;
+  }).join('');
 }
 function miniRow(a,b){return `<div class="mini-row"><span>${esc(a)}</span><strong>${b}</strong></div>`;}
 

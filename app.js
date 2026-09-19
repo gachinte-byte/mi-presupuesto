@@ -15,7 +15,6 @@ let selectedAssetChart = 'total';
 let selectedExpenseCategory = 'all';
 let analyticsNotesOpen = false;
 let expenseOrganizeMode = false;
-let homeExpenseSlide = 0;
 let savingsOrganizeMode = false;
 let incomeOrganizeMode = false;
 
@@ -565,34 +564,8 @@ function bindEvents() {
   document.addEventListener('pointerout',handleChartPointerOut);
   document.addEventListener('pointermove',handleChartPointerMove);
   document.addEventListener('pointerdown',handleChartPointerDown,{passive:false});
-
-function setupHomeExpenseCarousel(){
-  const root=document.querySelector('#homeExpenseCarousel');
-  if(!root || root.dataset.bound==='1')return;
-  root.dataset.bound='1';
-  let startX=0,startY=0,tracking=false;
-  root.addEventListener('click',e=>{
-    const btn=e.target.closest?.('[data-home-expense-slide]');
-    if(!btn)return;
-    homeExpenseSlide=Number(btn.dataset.homeExpenseSlide)||0;
-    renderHome();
-  });
-  root.addEventListener('touchstart',e=>{
-    if(e.touches.length!==1)return;
-    startX=e.touches[0].clientX; startY=e.touches[0].clientY; tracking=true;
-  },{passive:true});
-  root.addEventListener('touchend',e=>{
-    if(!tracking || !e.changedTouches.length)return;
-    const dx=e.changedTouches[0].clientX-startX;
-    const dy=e.changedTouches[0].clientY-startY;
-    tracking=false;
-    if(Math.abs(dx)<45 || Math.abs(dx)<Math.abs(dy)*1.15)return;
-    homeExpenseSlide=dx<0?1:0;
-    renderHome();
-  },{passive:true});
-}
-
   document.addEventListener('click',handleChartClick);
+  bindHomeExpenseCarousel();
   $('#settingsBtn').onclick=openSettings;
   $('#toggleExpenseOrganize').onclick=toggleExpenseOrganize;
   const expenseBudgetsBtn=$('#expenseBudgetsBtn');
@@ -605,7 +578,6 @@ function setupHomeExpenseCarousel(){
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
   document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
-  setupHomeExpenseCarousel();
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
 
@@ -912,7 +884,7 @@ function openMoveAsset(itemId){
   $('#modalBackdrop').classList.remove('hidden'); const sel=$('#moveAssetCategory'); $('#moveAssetForm').onsubmit=async e=>{e.preventDefault();if(!sel.value){alert('Selecciona una categoría.');return;}const ok=await moveAssetItemToCategory(itemId,sel.value);if(ok)closeModal();}; setTimeout(()=>sel.focus(),50);
 }
 
-function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();}
+function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses();renderAssets();renderAnalytics();bindHomeExpenseCarousel();}
 function renderMonthLabels(){updateVisibleMonthLabels();}
 function renderHome(){
   renderMonthlyNotes();
@@ -922,77 +894,253 @@ function renderHome(){
   $('#summaryExtra').textContent=money(Math.abs(t.extra));
   $('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';
   $('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
+
   $('#homeIncomeTotal').textContent=money(t.income);
-  $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
+  $('#homeIncomeList').innerHTML=state.incomeItems
+    .filter(x=>getMonthValue(x,currentMonth)!==0)
+    .map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth))))
+    .join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
 
-  const cats=categoryTotals();
-  const homeCats=centralCatalogMode() ? (centralCatalog()?.categorias||[]) : [];
-  const findHomeCatId=(name)=>{
-    const n=String(name||'').trim().toLowerCase();
-    const c=homeCats.find(x=>String(centralCategoryDisplayName(x)||x.nombre||'').trim().toLowerCase()===n || String(x.nombre||'').trim().toLowerCase()===n);
-    return c?.id||'';
-  };
-
-  // En Inicio se muestran siempre las seis categorías oficiales, incluso si alguna está en $0.
-  const catMap=new Map(cats.map(([name,v])=>[String(name),Number(v)||0]));
-  let homeRows=[...cats];
-  if(homeCats.length){
-    const ordered=homeCats.map(c=>centralCategoryDisplayName(c)||c.nombre).filter(Boolean);
-    const existing=new Set(homeRows.map(([name])=>String(name).toLowerCase()));
-    ordered.forEach(name=>{if(!existing.has(String(name).toLowerCase()) && homeRows.length<6){homeRows.push([name,0]);}});
-  }
-  homeRows=homeRows.slice(0,6);
-  const max=Math.max(...homeRows.map(([,v])=>Number(v)||0),1);
-  const itemsHtml=homeRows.map(([name,v])=>{
-    const categoryId=findHomeCatId(name);
-    const info=categoryId?categoryBudgetInfo(categoryId,v,currentMonth):null;
-    let barClass='category-bar'; let width=Math.round((Number(v)||0)/max*100); let aria='Gasto relativo del mes';
-    if(info && info.limit>0){
-      width=Math.min(100,Math.max(0,info.percent));
-      barClass+=` home-limit-bar ${info.tone}`;
-      aria=`Uso del límite: ${Math.round(info.percent)}%`;
-    }else if(categoryId){
-      barClass+=' home-limit-bar no-limit';
-      width=0;
-      aria='Sin límite configurado';
+  // La tarjeta de gastos del Inicio tiene dos vistas del mismo tamaño:
+  // 1) barras por categoría y 2) dona con la distribución del mes.
+  // Se renderiza de forma independiente para que un fallo del gráfico
+  // nunca impida que aparezca "Mi dinero".
+  try{
+    renderHomeExpenseCarousel();
+  }catch(err){
+    console.error('Error en carrusel de gastos de Inicio:',err);
+    const list=$('#homeExpenseList');
+    if(list){
+      const fallback=categoryTotals();
+      list.innerHTML=fallback.map(([name,v])=>`<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="category-bar"><span style="width:0%"></span></div></div><div class="category-value">${money(v)}</div></div>`).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
     }
-    return `<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="${barClass}" role="progressbar" aria-label="${escAttr(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,Math.round(width))}"><span style="width:${width}%"></span></div></div><div class="category-value">${money(v)}</div></div>`;
-  }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
+    const totalEl=$('#homeExpenseTotal');
+    if(totalEl)totalEl.textContent=money(t.expenses);
+  }
 
-  const total=t.expenses;
-  const monthNames=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const monthIndex=Math.max(1,Math.min(12,Number(currentMonth.slice(5,7))))-1;
-  const monthLabel=monthNames[monthIndex]||'mes';
-  const donutRows=homeRows.map(([name,v])=>({name,value:Number(v)||0}));
-  const donutTotal=donutRows.reduce((sum,r)=>sum+r.value,0);
-  const W=320,H=250,cx=160,cy=118,r=91,inner=51;
+  const a=assetTotals();
+  $('#homeWealthTotal').textContent=money(a.totalCopEquivalent);
+  renderHomeSavingsGroups();
+}
+
+function homeExpenseCategoryData(month=currentMonth){
+  const valuesByName=new Map();
+
+  if(centralCatalogMode()){
+    const groups=centralExpenseGroups();
+    groups.forEach(cat=>{
+      const name=String(cat.displayName||cat.nombre||'').trim();
+      if(!name)return;
+      const value=cat.subcategorias.reduce((sum,sub)=>sum+getCentralExpenseValue(month,sub.id),0);
+      valuesByName.set(name,value);
+    });
+  }else{
+    state.expenseItems.forEach(x=>{
+      const name=String(x.category||'').trim();
+      if(!name)return;
+      valuesByName.set(name,(valuesByName.get(name)||0)+getMonthValue(x,month));
+    });
+  }
+
+  // En el catálogo actual son las seis categorías principales del presupuesto.
+  // Conservamos su orden configurado y mantenemos las categorías aunque tengan $0.
+  let names=[];
+  if(centralCatalogMode()){
+    names=centralExpenseGroups().map(x=>String(x.displayName||x.nombre||'').trim()).filter(Boolean);
+  }else{
+    names=orderedExpenseCategories();
+  }
+  names=[...new Set(names.filter(Boolean))];
+
+  // Si por alguna razón el catálogo no está disponible, completamos con las
+  // categorías que sí tienen movimientos para no dejar vacía la tarjeta.
+  if(names.length<6){
+    [...valuesByName.keys()].forEach(n=>{if(!names.includes(n))names.push(n);});
+  }
+
+  return names.slice(0,6).map(name=>({
+    name,
+    value:Number(valuesByName.get(name)||0)
+  }));
+}
+
+function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
+  const W=420,H=245,cx=210,cy=112,r=94,inner=51;
+  if(total<=0){
+    return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sin gastos registrados en ${escAttr(monthLabel(currentMonth))}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0eef3"></circle><circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff"></circle><text x="${cx}" y="${cy-2}" text-anchor="middle" class="home-donut-center-total">$0</text><text x="${cx}" y="${cy+18}" text-anchor="middle" class="home-donut-center-label">Total del mes</text></svg></div>`;
+  }
+
   let angle=-Math.PI/2;
   const paths=[];
-  donutRows.forEach((row,i)=>{
-    const value=row.value;
-    if(value<=0 || donutTotal<=0)return;
-    const start=angle,end=angle+(value/donutTotal)*Math.PI*2;
+  rows.forEach((row,i)=>{
+    if(row.value<=0)return;
+    const start=angle;
+    const end=angle+(row.value/total)*Math.PI*2;
     const large=end-start>Math.PI?1:0;
     const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
     const x2=cx+r*Math.cos(end),y2=cy+r*Math.sin(end);
     const ix2=cx+inner*Math.cos(end),iy2=cy+inner*Math.sin(end);
     const ix1=cx+inner*Math.cos(start),iy1=cy+inner*Math.sin(start);
     const d=`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`;
-    const pct=donutTotal?Math.round(value/donutTotal*100):0;
-    paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="home-donut-slice chart-hit" data-label="${escAttr(row.name)}" data-value="${escAttr(money(value))} · ${pct}%"><title>${esc(row.name)}: ${esc(money(value))} (${pct}%)</title></path>`);
+    const pct=Math.round(row.value/total*100);
+    const active=i===selectedIndex?' home-donut-slice-selected':'';
+    paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="home-donut-slice${active}" data-home-donut-index="${i}" tabindex="0" role="button" aria-label="${escAttr(row.name)} ${money(row.value)} ${pct}%" pointer-events="all"><title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title></path>`);
     angle=end;
   });
-  const legend=donutRows.map((row,i)=>{
-    const pct=donutTotal?Math.round(row.value/donutTotal*100):0;
-    return `<div class="home-donut-legend-row"><span><i style="background:${chartPalette[i%chartPalette.length]}"></i><strong>${esc(row.name)}</strong></span><b>${money(row.value)}</b><small>${pct}%</small></div>`;
-  }).join('');
-  const donutHtml=`<div class="home-donut-wrap"><div class="home-donut-svg-wrap"><div class="chart-tooltip" aria-hidden="true"></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos de ${escAttr(monthLabel)}"><g>${paths.join('')}</g><text x="${cx}" y="${cy-2}" text-anchor="middle" class="home-donut-total">${esc(money(donutTotal))}</text><text x="${cx}" y="${cy+17}" text-anchor="middle" class="home-donut-label">Total del mes</text></svg></div><div class="home-donut-legend">${legend}</div></div>`;
 
-  const viewport=$('#homeExpenseCarousel');
-  if(viewport){
-    viewport.innerHTML=`<div class="home-expense-track" style="transform:translateX(-${homeExpenseSlide*100}%);"><div class="home-expense-slide"><div class="section-heading"><div><span class="eyebrow">GASTOS</span><h2>Por categoría</h2></div><button class="text-btn" data-go="expenses">Ver gastos</button></div><div class="category-list">${itemsHtml}</div><div class="total-line"><span>Gastos totales</span><strong>${money(total)}</strong></div></div><div class="home-expense-slide"><div class="section-heading"><div><span class="eyebrow">GASTOS</span><h2>Distribución de ${esc(monthLabel)}</h2></div><button class="text-btn" data-go="expenses">Ver gastos</button></div>${donutHtml}<div class="total-line"><span>Gastos totales</span><strong>${money(total)}</strong></div></div></div><div class="home-expense-dots" role="tablist" aria-label="Vistas de gastos"><button type="button" class="${homeExpenseSlide===0?'active':''}" data-home-expense-slide="0" aria-label="Ver gastos por categoría" aria-selected="${homeExpenseSlide===0}"></button><button type="button" class="${homeExpenseSlide===1?'active':''}" data-home-expense-slide="1" aria-label="Ver distribución del mes" aria-selected="${homeExpenseSlide===1}"></button></div>`;
+  const selected=rows[selectedIndex]||null;
+  const centerName=selected?selected.name:'Total del mes';
+  const centerValue=selected?money(selected.value):money(total);
+  const centerPct=selected?`${Math.round(selected.value/total*100)}%`:'Total del mes';
+
+  return `<div class="home-donut-svg-wrap">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría en ${escAttr(monthLabel(currentMonth))}">
+      <g>${paths.join('')}</g>
+      <text x="${cx}" y="${cy-5}" text-anchor="middle" class="home-donut-center-total">${esc(centerValue)}</text>
+      <text x="${cx}" y="${cy+15}" text-anchor="middle" class="home-donut-center-label">${esc(centerName)}</text>
+      ${selected?`<text x="${cx}" y="${cy+33}" text-anchor="middle" class="home-donut-center-pct">${esc(centerPct)}</text>`:''}
+    </svg>
+  </div>`;
+}
+
+let homeExpenseDonutSelected=-1;
+
+function renderHomeExpenseCarousel(){
+  const rows=homeExpenseCategoryData(currentMonth);
+  const total=rows.reduce((sum,row)=>sum+row.value,0);
+  const max=Math.max(...rows.map(x=>x.value),1);
+
+  const list=$('#homeExpenseList');
+  if(list){
+    list.innerHTML=rows.map((row)=>{
+      const pct=total?Math.round(row.value/total*100):0;
+      const width=Math.round(row.value/max*100);
+      return `<div class="category-item"><div><div class="category-name">${esc(row.name)}</div><div class="category-bar"><span style="width:${width}%"></span></div></div><div class="category-value"><strong>${money(row.value)}</strong><small>${pct}%</small></div></div>`;
+    }).join('')||'<div class="empty">No hay categorías disponibles este mes.</div>';
   }
-  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);renderHomeSavingsGroups();
+
+  const totalEl=$('#homeExpenseTotal');
+  if(totalEl)totalEl.textContent=money(total);
+
+  const donut=$('#homeExpenseDonut');
+  if(donut){
+    if(homeExpenseDonutSelected>=rows.length || (rows[homeExpenseDonutSelected]?.value||0)<=0) homeExpenseDonutSelected=-1;
+    const legend=rows.map((row,i)=>{
+      const pct=total?Math.round(row.value/total*100):0;
+      const selected=i===homeExpenseDonutSelected;
+      return `<button type="button" class="home-donut-legend-row${selected?' is-selected':''}" data-home-donut-legend="${i}" aria-label="${escAttr(row.name)}: ${escAttr(money(row.value))}, ${pct}%">
+        <span class="home-donut-legend-name"><i style="background:${chartPalette[i%chartPalette.length]}"></i><strong>${esc(row.name)}</strong></span>
+        <b>${money(row.value)}</b><small>${pct}%</small>
+      </button>`;
+    }).join('');
+
+    donut.innerHTML=`<div class="home-donut-month-label">Distribución · ${esc(monthLabel(currentMonth))}</div>
+      ${homeExpenseDonutSvg(rows,total,homeExpenseDonutSelected)}
+      <div class="home-donut-legend">${legend}</div>
+      <div class="home-donut-total-line"><span>Gastos totales</span><strong>${money(total)}</strong></div>`;
+  }
+
+  const title=$('#homeExpenseSlideTitle');
+  if(title)title.textContent=homeExpenseCarouselIndex===0?'Por categoría':'Distribución del mes';
+
+  syncHomeExpenseCarouselUI(false);
+}
+
+let homeExpenseCarouselIndex=0;
+
+function syncHomeExpenseCarouselUI(animate=true){
+  const carousel=$('#homeExpenseCarousel');
+  if(!carousel)return;
+  const track=carousel.querySelector('.home-expense-track');
+  if(track)track.scrollTo({left:carousel.clientWidth*homeExpenseCarouselIndex,behavior:animate?'smooth':'auto'});
+  $$('.home-expense-dot').forEach((dot,i)=>{
+    const active=i===homeExpenseCarouselIndex;
+    dot.classList.toggle('is-active',active);
+    dot.setAttribute('aria-selected',active?'true':'false');
+  });
+  const title=$('#homeExpenseSlideTitle');
+  if(title)title.textContent=homeExpenseCarouselIndex===0?'Por categoría':'Distribución del mes';
+}
+
+function setHomeExpenseSlide(index,animate=true){
+  homeExpenseCarouselIndex=Math.max(0,Math.min(1,Number(index)||0));
+  syncHomeExpenseCarouselUI(animate);
+}
+
+function bindHomeExpenseCarousel(){
+  const carousel=$('#homeExpenseCarousel');
+  if(!carousel || carousel.dataset.bound==='1')return;
+  carousel.dataset.bound='1';
+  const track=carousel.querySelector('.home-expense-track');
+  if(!track)return;
+
+  let pointerStartX=null;
+  let pointerStartScroll=0;
+  let dragging=false;
+
+  track.addEventListener('scroll',()=>{
+    if(dragging)return;
+    const width=Math.max(1,carousel.clientWidth);
+    const idx=Math.round(track.scrollLeft/width);
+    if(idx!==homeExpenseCarouselIndex){
+      homeExpenseCarouselIndex=Math.max(0,Math.min(1,idx));
+      syncHomeExpenseCarouselUI(false);
+    }
+  },{passive:true});
+
+  track.addEventListener('pointerdown',(e)=>{
+    if(e.target.closest('.home-donut-slice,.home-donut-legend-row'))return;
+    pointerStartX=e.clientX;
+    pointerStartScroll=track.scrollLeft;
+    dragging=false;
+    track.setPointerCapture?.(e.pointerId);
+  });
+  track.addEventListener('pointermove',(e)=>{
+    if(pointerStartX===null)return;
+    const dx=e.clientX-pointerStartX;
+    if(Math.abs(dx)>5)dragging=true;
+    if(dragging){
+      e.preventDefault();
+      track.scrollLeft=pointerStartScroll-dx;
+    }
+  });
+  track.addEventListener('pointerup',(e)=>{
+    if(pointerStartX===null)return;
+    const dx=e.clientX-pointerStartX;
+    if(Math.abs(dx)>35){
+      setHomeExpenseSlide(homeExpenseCarouselIndex+(dx<0?1:-1),true);
+    }else{
+      const idx=Math.round(track.scrollLeft/Math.max(1,carousel.clientWidth));
+      setHomeExpenseSlide(idx,true);
+    }
+    pointerStartX=null;
+    setTimeout(()=>{dragging=false;},0);
+  });
+  track.addEventListener('pointercancel',()=>{pointerStartX=null;dragging=false;});
+
+  carousel.addEventListener('wheel',(e)=>{
+    if(Math.abs(e.deltaX)>10){
+      e.preventDefault();
+      setHomeExpenseSlide(homeExpenseCarouselIndex+(e.deltaX>0?1:-1),true);
+    }
+  },{passive:false});
+
+  carousel.querySelectorAll('[data-home-donut-index],[data-home-donut-legend]').forEach(el=>{
+    el.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const idx=Number(el.dataset.homeDonutIndex??el.dataset.homeDonutLegend);
+      if(!Number.isInteger(idx))return;
+      homeExpenseDonutSelected=(homeExpenseDonutSelected===idx?-1:idx);
+      renderHomeExpenseCarousel();
+      setHomeExpenseSlide(1,false);
+    });
+  });
+
+  carousel.querySelector('[data-home-expense-prev]')?.addEventListener('click',()=>setHomeExpenseSlide(homeExpenseCarouselIndex-1,true));
+  carousel.querySelector('[data-home-expense-next]')?.addEventListener('click',()=>setHomeExpenseSlide(homeExpenseCarouselIndex+1,true));
+  carousel.querySelectorAll('[data-home-expense-slide]').forEach(dot=>{
+    dot.addEventListener('click',()=>setHomeExpenseSlide(Number(dot.dataset.homeExpenseSlide),true));
+  });
 }
 
 function homeSavingsGroupKey(category){
@@ -2412,5 +2560,3 @@ document.addEventListener('click',e=>{
 
 boot();
 setTimeout(()=>refreshSmsPendingUI(),700);
-
- 

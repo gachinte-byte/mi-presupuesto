@@ -43,7 +43,7 @@
           <div><span class="eyebrow">GASTOS</span><h2 id="homeExpenseSlideTitle">Por categoría</h2></div>
           <button class="text-btn" data-go="expenses">Ver gastos</button>
         </div>
-        <div id="homeExpenseCarousel" class="home-expense-carousel" aria-label="Resumen de gastos del mes">
+        <div id="homeExpenseCarousel" class="home-expense-carousel" tabindex="0" aria-label="Resumen de gastos del mes">
           <div class="home-expense-track">
             <article class="home-expense-slide" data-home-slide="0">
               <div id="homeExpenseList" class="category-list home-category-list"></div>
@@ -55,12 +55,10 @@
           </div>
         </div>
         <div class="home-expense-carousel-controls" aria-label="Cambiar vista de gastos">
-          <button type="button" class="home-expense-nav" data-home-expense-prev aria-label="Ver categorías">‹</button>
           <div class="home-expense-dots" role="tablist" aria-label="Vistas de gastos">
             <button type="button" class="home-expense-dot is-active" data-home-expense-slide="0" role="tab" aria-selected="true" aria-label="Vista por categoría">●</button>
             <button type="button" class="home-expense-dot" data-home-expense-slide="1" role="tab" aria-selected="false" aria-label="Vista distribución del mes">●</button>
           </div>
-          <button type="button" class="home-expense-nav" data-home-expense-next aria-label="Ver distribución del mes">›</button>
         </div>
       </section>
       <section class="section-card investments-preview"><div class="section-heading"><div><span class="eyebrow">MI DINERO</span><h2>Ahorros e inversiones</h2></div><button class="text-btn" data-go="savings">Ver saldos</button></div><div class="wealth-total" id="homeWealthTotal">$0 COP</div><div id="homeSavingsList" class="mini-list"></div></section>

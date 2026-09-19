@@ -966,7 +966,7 @@ function homeExpenseBarData(month=currentMonth){
 }
 
 function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
-  const W=420,H=205,cx=210,cy=102,r=91,inner=52;
+  const W=420,H=188,cx=210,cy=94,r=84,inner=48;
 
   if(total<=0){
     return `<div class="home-donut-svg-wrap">

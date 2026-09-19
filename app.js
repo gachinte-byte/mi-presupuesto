@@ -887,126 +887,130 @@ function render(){renderMonthLabels();renderHome();renderIncome();renderExpenses
 function renderMonthLabels(){updateVisibleMonthLabels();}
 function renderHome(){
   renderMonthlyNotes();
-  const t=totals();
-  $('#summaryIncome').textContent=money(t.income);
-  $('#summaryExpenses').textContent=money(t.expenses);
-  $('#summaryExtra').textContent=money(Math.abs(t.extra));
-  $('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';
-  $('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
-
-  $('#homeIncomeTotal').textContent=money(t.income);
-  $('#homeIncomeList').innerHTML=state.incomeItems
-    .filter(x=>getMonthValue(x,currentMonth)!==0)
-    .map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth))))
-    .join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
-
-  // El carrusel no puede bloquear ni romper el resto de Inicio.
-  try{
-    renderHomeExpenseCarousel();
-  }catch(err){
-    console.error('Error en carrusel de gastos de Inicio:',err);
-    const list=$('#homeExpenseList');
-    if(list){
-      const cats=categoryTotals(currentMonth);
-      const max=cats[0]?.[1]||1;
-      list.innerHTML=cats.slice(0,6).map(([name,v])=>{
-        const info=homeExpenseBarInfo(name,v,currentMonth);
-        return `<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="${info.barClass}"><span style="width:${info.width}%"></span></div></div><div class="category-value"><strong>${money(v)}</strong></div></div>`;
-      }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
+  const t=totals();$('#summaryIncome').textContent=money(t.income);$('#summaryExpenses').textContent=money(t.expenses);$('#summaryExtra').textContent=money(Math.abs(t.extra));$('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';$('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
+  $('#homeIncomeTotal').textContent=money(t.income);$('#homeExpenseTotal').textContent=money(t.expenses);
+  $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
+  const cats=categoryTotals();
+  const homeCats=centralCatalogMode() ? (centralCatalog()?.categorias||[]) : [];
+  const findHomeCatId=(name)=>{ const n=String(name||'').trim().toLowerCase(); const c=homeCats.find(x=>String(centralCategoryDisplayName(x)||x.nombre||'').trim().toLowerCase()===n || String(x.nombre||'').trim().toLowerCase()===n); return c?.id||''; };
+  const max=cats[0]?.[1]||1;
+  $('#homeExpenseList').innerHTML=cats.map(([name,v])=>{
+    const categoryId=findHomeCatId(name);
+    const info=categoryId?categoryBudgetInfo(categoryId,v,currentMonth):null;
+    let barClass='category-bar'; let width=Math.round(v/max*100); let aria='Gasto relativo del mes';
+    if(info && info.limit>0){
+      width=Math.min(100,Math.max(0,info.percent));
+      barClass+=` home-limit-bar ${info.tone}`;
+      aria=`Uso del límite: ${Math.round(info.percent)}%`;
+    }else if(categoryId){
+      barClass+=' home-limit-bar no-limit';
+      width=0;
+      aria='Sin límite configurado';
     }
-    const totalEl=$('#homeExpenseTotal');
-    if(totalEl)totalEl.textContent=money(t.expenses);
-  }
-
-  const a=assetTotals();
-  $('#homeWealthTotal').textContent=money(a.totalCopEquivalent);
-  renderHomeSavingsGroups();
+    return `<div class="category-item"><div><div class="category-name">${esc(name)}</div><div class="${barClass}" role="progressbar" aria-label="${escAttr(aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,Math.round(width))}"><span style="width:${width}%"></span></div></div><div class="category-value">${money(v)}</div></div>`;
+  }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
+  renderHomeExpenseCarousel();
+  const a=assetTotals();$('#homeWealthTotal').textContent=money(a.totalCopEquivalent);renderHomeSavingsGroups();
 }
+
+// ===== Inicio: carrusel seguro de Gastos =====
+// Esta sección está aislada: las demás pantallas de la app permanecen con la lógica estable.
+
+let homeExpenseDonutSelected = -1;
+let homeExpenseCarouselIndex = 0;
 
 function homeExpenseCategoryData(month=currentMonth){
-  // La vista de Inicio conserva exactamente la lógica del gráfico original:
-  // categorías ordenadas por gasto y barras basadas en los límites configurados.
-  const totals = categoryTotals(month).map(([name,value])=>({name:String(name||'').trim(),value:Number(value)||0}));
-  const byName = new Map(totals.map(x=>[x.name,x.value]));
+  const rows = categoryTotals(month).map(([name,value]) => ({
+    name:String(name||'').trim(),
+    value:Number(value)||0
+  })).filter(x=>x.name);
 
-  // Garantizar las seis categorías del presupuesto, incluyendo las que estén en $0.
-  let names = [];
-  if(centralCatalogMode()){
-    names = (centralCatalog()?.categorias||[])
-      .map(x=>String(centralCategoryDisplayName(x)||x.nombre||'').trim())
-      .filter(Boolean);
-  }else{
-    names = orderedExpenseCategories().map(x=>String(x||'').trim()).filter(Boolean);
-  }
-
-  // Primero las categorías con gasto, respetando el orden de mayor a menor del gráfico estable.
-  const ordered = [];
-  totals.forEach(x=>{ if(!ordered.includes(x.name)) ordered.push(x.name); });
-  names.forEach(n=>{ if(!ordered.includes(n)) ordered.push(n); });
-
-  // Si existen más de seis, conservamos las seis categorías que venía mostrando Inicio.
-  return ordered.slice(0,6).map(name=>({name,value:Number(byName.get(name)||0)}));
+  // Inicio muestra las seis categorías que ya utiliza el presupuesto.
+  // Si hay más, conserva las primeras seis del orden original (mayor gasto primero).
+  return rows.slice(0,6);
 }
 
-function homeExpenseCategoryId(name){
-  const target=String(name||'').trim().toLowerCase();
-  if(!centralCatalogMode()) return '';
-  const cats=centralCatalog()?.categorias||[];
-  const c=cats.find(x=>{
-    const display=String(centralCategoryDisplayName(x)||x.nombre||'').trim().toLowerCase();
-    const original=String(x.nombre||'').trim().toLowerCase();
-    return display===target || original===target;
+function homeExpenseBarData(month=currentMonth){
+  const cats = categoryTotals(month);
+  const homeCats = centralCatalogMode() ? (centralCatalog()?.categorias||[]) : [];
+  const findHomeCatId=(name)=>{
+    const n=String(name||'').trim().toLowerCase();
+    const c=homeCats.find(x=>
+      String(centralCategoryDisplayName(x)||x.nombre||'').trim().toLowerCase()===n ||
+      String(x.nombre||'').trim().toLowerCase()===n
+    );
+    return c?.id||'';
+  };
+  const max=cats[0]?.[1]||1;
+
+  return cats.slice(0,6).map(([name,v])=>{
+    const categoryId=findHomeCatId(name);
+    const info=categoryId?categoryBudgetInfo(categoryId,v,month):null;
+    let barClass='category-bar';
+    let width=Math.round(v/max*100);
+    let aria='Gasto relativo del mes';
+
+    // MISMA lógica estable de límites.
+    if(info && info.limit>0){
+      width=Math.min(100,Math.max(0,info.percent));
+      barClass+=` home-limit-bar ${info.tone}`;
+      aria=`Uso del límite: ${Math.round(info.percent)}%`;
+    }else if(categoryId){
+      barClass+=' home-limit-bar no-limit';
+      width=0;
+      aria='Sin límite configurado';
+    }
+
+    return {name,value:Number(v)||0,barClass,width,aria};
   });
-  return c?.id||'';
-}
-
-function homeExpenseBarInfo(name,value,month=currentMonth){
-  const categoryId=homeExpenseCategoryId(name);
-  const info=categoryId?categoryBudgetInfo(categoryId,value,month):null;
-  let width=0;
-  let barClass='category-bar home-limit-bar';
-  let aria='Gasto relativo del mes';
-
-  if(info && info.limit>0){
-    width=Math.min(100,Math.max(0,info.percent));
-    barClass+=` ${info.tone}`;
-    aria=`Uso del límite: ${Math.round(info.percent)}%`;
-  }else if(categoryId){
-    barClass+=' no-limit';
-    aria='Sin límite configurado';
-  }else{
-    // Modo local: conservar la barra proporcional del Inicio original.
-    const rows=categoryTotals(month);
-    const max=rows[0]?.[1]||1;
-    width=Math.min(100,Math.max(0,Math.round(value/max*100)));
-    aria='Gasto relativo del mes';
-  }
-  return {width,barClass,aria};
 }
 
 function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
-  const W=420,H=195,cx=210,cy=97.5,r=88,inner=50;
+  const W=420,H=166,cx=210,cy=80,r=68,inner=38;
+
   if(total<=0){
-    return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sin gastos registrados en ${escAttr(monthLabel(currentMonth))}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0eef3"></circle><circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff"></circle><text x="${cx}" y="${cy-3}" text-anchor="middle" class="home-donut-center-total">$0</text><text x="${cx}" y="${cy+15}" text-anchor="middle" class="home-donut-center-label">Total del mes</text></svg></div>`;
+    return `<div class="home-donut-svg-wrap">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sin gastos registrados">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#eeebf2"></circle>
+        <circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff"></circle>
+        <text x="${cx}" y="${cy-1}" text-anchor="middle" class="home-donut-center-total">$0</text>
+        <text x="${cx}" y="${cy+16}" text-anchor="middle" class="home-donut-center-label">Total del mes</text>
+      </svg>
+    </div>`;
   }
 
   let angle=-Math.PI/2;
   const paths=[];
+
   rows.forEach((row,i)=>{
     if(row.value<=0)return;
-    const start=angle,end=angle+(row.value/total)*Math.PI*2;
+    const start=angle;
+    const end=angle+(row.value/total)*Math.PI*2;
     const large=end-start>Math.PI?1:0;
     const active=i===selectedIndex;
     const mid=(start+end)/2;
-    const off=active?5:0;
-    const ox=Math.cos(mid)*off,oy=Math.sin(mid)*off;
-    const x1=cx+ox+r*Math.cos(start),y1=cy+oy+r*Math.sin(start);
-    const x2=cx+ox+r*Math.cos(end),y2=cy+oy+r*Math.sin(end);
-    const ix2=cx+ox+inner*Math.cos(end),iy2=cy+oy+inner*Math.sin(end);
+    const offset=active?5:0;
+    const ox=Math.cos(mid)*offset;
+    const oy=Math.sin(mid)*offset;
+
+    const x1=cx+ox+r*Math.cos(start), y1=cy+oy+r*Math.sin(start);
+    const x2=cx+ox+r*Math.cos(end),   y2=cy+oy+r*Math.sin(end);
+    const ix2=cx+ox+inner*Math.cos(end), iy2=cy+oy+inner*Math.sin(end);
     const ix1=cx+ox+inner*Math.cos(start),iy1=cy+oy+inner*Math.sin(start);
+
     const d=`M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`;
     const pct=Math.round(row.value/total*100);
-    paths.push(`<path d="${d}" fill="${chartPalette[i%chartPalette.length]}" class="home-donut-slice${active?' home-donut-slice-selected':''}" data-home-donut-index="${i}" tabindex="0" role="button" aria-label="${escAttr(row.name)} ${money(row.value)} ${pct}%"><title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title></path>`);
+
+    paths.push(`<path d="${d}"
+      fill="${chartPalette[i%chartPalette.length]}"
+      class="home-donut-slice${active?' home-donut-slice-selected':''}"
+      data-home-donut-index="${i}"
+      tabindex="0"
+      role="button"
+      aria-label="${escAttr(row.name)} ${money(row.value)} ${pct}%">
+      <title>${esc(row.name)}: ${esc(money(row.value))} (${pct}%)</title>
+    </path>`);
+
     angle=end;
   });
 
@@ -1015,48 +1019,67 @@ function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
   const centerName=selected?selected.name:'Total del mes';
   const centerPct=selected?`${Math.round(selected.value/total*100)}%`:'';
 
-  return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría en ${escAttr(monthLabel(currentMonth))}"><g>${paths.join('')}</g><text x="${cx}" y="${cy-6}" text-anchor="middle" class="home-donut-center-total">${esc(centerValue)}</text><text x="${cx}" y="${cy+10}" text-anchor="middle" class="home-donut-center-label">${esc(centerName)}</text>${selected?`<text x="${cx}" y="${cy+25}" text-anchor="middle" class="home-donut-center-pct">${esc(centerPct)}</text>`:''}</svg></div>`;
+  return `<div class="home-donut-svg-wrap">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría">
+      <g>${paths.join('')}</g>
+      <text x="${cx}" y="${cy-5}" text-anchor="middle" class="home-donut-center-total">${esc(centerValue)}</text>
+      <text x="${cx}" y="${cy+12}" text-anchor="middle" class="home-donut-center-label">${esc(centerName)}</text>
+      ${selected?`<text x="${cx}" y="${cy+27}" text-anchor="middle" class="home-donut-center-pct">${esc(centerPct)}</text>`:''}
+    </svg>
+  </div>`;
 }
-
-let homeExpenseDonutSelected=-1;
-let homeExpenseCarouselIndex=0;
 
 function renderHomeExpenseCarousel(){
   const rows=homeExpenseCategoryData(currentMonth);
   const total=rows.reduce((sum,row)=>sum+row.value,0);
 
+  // Primera vista: usamos exactamente la lógica estable de límites.
   const list=$('#homeExpenseList');
   if(list){
-    list.innerHTML=rows.map(row=>{
-      const info=homeExpenseBarInfo(row.name,row.value,currentMonth);
-      return `<div class="category-item">
+    const barRows=homeExpenseBarData(currentMonth);
+    list.innerHTML=barRows.map(row=>`
+      <div class="category-item">
         <div>
           <div class="category-name">${esc(row.name)}</div>
-          <div class="${info.barClass}" role="progressbar" aria-label="${escAttr(info.aria)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(100,Math.round(info.width))}">
-            <span style="width:${info.width}%"></span>
+          <div class="${row.barClass}" role="progressbar"
+               aria-label="${escAttr(row.aria)}"
+               aria-valuemin="0" aria-valuemax="100"
+               aria-valuenow="${Math.min(100,Math.round(row.width))}">
+            <span style="width:${row.width}%"></span>
           </div>
         </div>
-        <div class="category-value"><strong>${money(row.value)}</strong></div>
-      </div>`;
-    }).join('')||'<div class="empty">No hay gastos registrados este mes.</div>';
+        <div class="category-value">${money(row.value)}</div>
+      </div>
+    `).join('') || '<div class="empty">No hay gastos registrados este mes.</div>';
   }
 
   const totalEl=$('#homeExpenseTotal');
-  if(totalEl)totalEl.textContent=money(total);
+  if(totalEl) totalEl.textContent=money(total);
 
   const donut=$('#homeExpenseDonut');
   if(donut){
-    if(homeExpenseDonutSelected>=rows.length || (rows[homeExpenseDonutSelected]?.value||0)<=0)homeExpenseDonutSelected=-1;
+    if(homeExpenseDonutSelected>=rows.length ||
+       (rows[homeExpenseDonutSelected]?.value||0)<=0){
+      homeExpenseDonutSelected=-1;
+    }
 
     const legend=rows.map((row,i)=>{
       const pct=total?Math.round(row.value/total*100):0;
       const selected=i===homeExpenseDonutSelected;
-      return `<button type="button" class="home-donut-legend-row${selected?' is-selected':''}" data-home-donut-legend="${i}" aria-label="${escAttr(row.name)}: ${escAttr(money(row.value))}, ${pct}%">
-        <span class="home-donut-legend-name"><i style="background:${chartPalette[i%chartPalette.length]}"></i><strong>${esc(row.name)}</strong></span>
-        <b>${money(row.value)}</b><small>${pct}%</small>
+      return `<button type="button"
+        class="home-donut-legend-row${selected?' is-selected':''}"
+        data-home-donut-legend="${i}"
+        aria-label="${escAttr(row.name)}: ${escAttr(money(row.value))}, ${pct}%">
+        <span class="home-donut-legend-name">
+          <i style="background:${chartPalette[i%chartPalette.length]}"></i>
+          <strong>${esc(row.name)}</strong>
+        </span>
+        <b>${money(row.value)}</b>
+        <small>${pct}%</small>
       </button>`;
     }).join('');
 
+    // El mes va junto al título para ahorrar espacio vertical.
     donut.innerHTML=
       homeExpenseDonutSvg(rows,total,homeExpenseDonutSelected)+
       `<div class="home-donut-legend">${legend}</div>`+
@@ -1064,29 +1087,41 @@ function renderHomeExpenseCarousel(){
   }
 
   const title=$('#homeExpenseSlideTitle');
-  if(title)title.textContent=homeExpenseCarouselIndex===0?`Por categoría · ${monthLabel(currentMonth)}`:`Distribución · ${monthLabel(currentMonth)}`;
+  if(title){
+    title.innerHTML=homeExpenseCarouselIndex===0
+      ? 'Por categoría'
+      : `Distribución <span class="home-expense-month-inline">· ${esc(monthLabel(currentMonth))}</span>`;
+  }
+
   syncHomeExpenseCarouselUI(false);
 }
 
 function syncHomeExpenseCarouselUI(animate=true){
-  const carousel=$('#homeExpenseCarousel'); if(!carousel)return;
+  const carousel=$('#homeExpenseCarousel');
+  if(!carousel)return;
   const track=carousel.querySelector('.home-expense-track');
+
   if(track){
-    track.style.transition=animate?'transform .28s ease':'none';
+    track.style.transition=animate?'transform .26s ease':'none';
     track.style.transform=`translate3d(-${homeExpenseCarouselIndex*50}%,0,0)`;
   }
+
   $$('.home-expense-dot').forEach((dot,i)=>{
     const active=i===homeExpenseCarouselIndex;
     dot.classList.toggle('is-active',active);
     dot.setAttribute('aria-selected',active?'true':'false');
   });
-  const title=$('#homeExpenseSlideTitle');
-  if(title)title.textContent=homeExpenseCarouselIndex===0?`Por categoría · ${monthLabel(currentMonth)}`:`Distribución · ${monthLabel(currentMonth)}`;
 }
 
 function setHomeExpenseSlide(index,animate=true){
   homeExpenseCarouselIndex=Math.max(0,Math.min(1,Number(index)||0));
   syncHomeExpenseCarouselUI(animate);
+  const title=$('#homeExpenseSlideTitle');
+  if(title){
+    title.innerHTML=homeExpenseCarouselIndex===0
+      ? 'Por categoría'
+      : `Distribución <span class="home-expense-month-inline">· ${esc(monthLabel(currentMonth))}</span>`;
+  }
 }
 
 function bindHomeExpenseCarousel(){
@@ -1098,14 +1133,18 @@ function bindHomeExpenseCarousel(){
 
   carousel.addEventListener('pointerdown',e=>{
     if(e.pointerType==='mouse' && e.button!==0)return;
-    // No iniciar el gesto sobre elementos interactivos: su click debe llegar limpio.
     if(e.target.closest?.('.home-donut-slice,.home-donut-legend-row,.home-expense-dot'))return;
-    startX=e.clientX; startY=e.clientY; swiping=false; pointerId=e.pointerId;
+    startX=e.clientX;
+    startY=e.clientY;
+    swiping=false;
+    pointerId=e.pointerId;
   });
 
   carousel.addEventListener('pointermove',e=>{
     if(startX===null)return;
-    const dx=e.clientX-startX,dy=e.clientY-startY;
+    const dx=e.clientX-startX;
+    const dy=e.clientY-startY;
+
     if(!swiping){
       if(Math.abs(dy)>Math.abs(dx) && Math.abs(dy)>8){
         startX=startY=null;
@@ -1116,18 +1155,23 @@ function bindHomeExpenseCarousel(){
         carousel.setPointerCapture?.(pointerId);
       }
     }
+
     if(swiping)e.preventDefault();
   },{passive:false});
 
   carousel.addEventListener('pointerup',e=>{
-    if(startX===null){return;}
+    if(startX===null)return;
     const dx=e.clientX-startX;
-    if(Math.abs(dx)>45)setHomeExpenseSlide(homeExpenseCarouselIndex+(dx<0?1:-1),true);
-    startX=startY=null;swiping=false;
+    if(Math.abs(dx)>45){
+      setHomeExpenseSlide(homeExpenseCarouselIndex+(dx<0?1:-1),true);
+    }
+    startX=startY=null;
+    swiping=false;
   });
 
   carousel.addEventListener('pointercancel',()=>{
-    startX=startY=null;swiping=false;
+    startX=startY=null;
+    swiping=false;
   });
 
   carousel.addEventListener('click',e=>{
@@ -1135,25 +1179,33 @@ function bindHomeExpenseCarousel(){
     const legend=e.target.closest?.('[data-home-donut-legend]');
     const dot=e.target.closest?.('[data-home-expense-slide]');
 
-    if(slice||legend){
+    if(slice || legend){
       const el=slice||legend;
       const raw=el.dataset.homeDonutIndex ?? el.dataset.homeDonutLegend;
       const idx=Number(raw);
+
       if(Number.isInteger(idx)){
-        homeExpenseDonutSelected=homeExpenseDonutSelected===idx?-1:idx;
+        homeExpenseDonutSelected=(homeExpenseDonutSelected===idx)?-1:idx;
         renderHomeExpenseCarousel();
         setHomeExpenseSlide(1,false);
       }
       return;
     }
+
     if(dot){
       setHomeExpenseSlide(Number(dot.dataset.homeExpenseSlide),true);
     }
   });
 
   carousel.addEventListener('keydown',e=>{
-    if(e.key==='ArrowLeft'){e.preventDefault();setHomeExpenseSlide(homeExpenseCarouselIndex-1,true);}
-    if(e.key==='ArrowRight'){e.preventDefault();setHomeExpenseSlide(homeExpenseCarouselIndex+1,true);}
+    if(e.key==='ArrowLeft'){
+      e.preventDefault();
+      setHomeExpenseSlide(homeExpenseCarouselIndex-1,true);
+    }
+    if(e.key==='ArrowRight'){
+      e.preventDefault();
+      setHomeExpenseSlide(homeExpenseCarouselIndex+1,true);
+    }
   });
 }
 

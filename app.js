@@ -605,6 +605,7 @@ function setupHomeExpenseCarousel(){
   document.addEventListener('focusin',e=>{if(e.target.matches('.value-input,.number-format'))focusNumberInput(e.target);});
   document.addEventListener('focusout',e=>{if(e.target.matches('.value-input,.number-format'))blurNumberInput(e.target);});
   $('#modalBackdrop').addEventListener('click',e=>{if(e.target.id==='modalBackdrop')closeModal();});
+  setupHomeExpenseCarousel();
 }
 function showView(view){activeView=view;$$('.view').forEach(v=>v.classList.toggle('active',v.id===`view-${view}`));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));render();window.scrollTo({top:0,behavior:'smooth'});}
 
@@ -922,7 +923,6 @@ function renderHome(){
   $('#extraLabel').textContent=t.extra>=0?'🟢 Extra disponible':'🔴 Déficit del mes';
   $('#summaryExtra').parentElement.classList.toggle('negative',t.extra<0);
   $('#homeIncomeTotal').textContent=money(t.income);
-  $('#homeExpenseTotal').textContent=money(t.expenses);
   $('#homeIncomeList').innerHTML=state.incomeItems.filter(x=>getMonthValue(x,currentMonth)!==0).map(x=>miniRow(x.name,money(getMonthValue(x,currentMonth)))).join('')||'<div class="empty">No hay ingresos registrados este mes.</div>';
 
   const cats=categoryTotals();
@@ -2413,5 +2413,4 @@ document.addEventListener('click',e=>{
 boot();
 setTimeout(()=>refreshSmsPendingUI(),700);
 
-
-setupHomeExpenseCarousel();
+ 

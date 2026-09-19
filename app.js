@@ -985,9 +985,9 @@ function homeExpenseBarInfo(name,value,month=currentMonth){
 }
 
 function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
-  const W=420,H=185,cx=210,cy=88,r=76,inner=42;
+  const W=420,H=195,cx=210,cy=97.5,r=88,inner=50;
   if(total<=0){
-    return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sin gastos registrados en ${escAttr(monthLabel(currentMonth))}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0eef3"></circle><circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff"></circle><text x="${cx}" y="${cy-2}" text-anchor="middle" class="home-donut-center-total">$0</text><text x="${cx}" y="${cy+16}" text-anchor="middle" class="home-donut-center-label">Total del mes</text></svg></div>`;
+    return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Sin gastos registrados en ${escAttr(monthLabel(currentMonth))}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#f0eef3"></circle><circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff"></circle><text x="${cx}" y="${cy-3}" text-anchor="middle" class="home-donut-center-total">$0</text><text x="${cx}" y="${cy+15}" text-anchor="middle" class="home-donut-center-label">Total del mes</text></svg></div>`;
   }
 
   let angle=-Math.PI/2;
@@ -1011,11 +1011,11 @@ function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
   });
 
   const selected=rows[selectedIndex]||null;
-  const centerName=selected?selected.name:'Total del mes';
   const centerValue=selected?money(selected.value):money(total);
+  const centerName=selected?selected.name:'Total del mes';
   const centerPct=selected?`${Math.round(selected.value/total*100)}%`:'';
 
-  return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría en ${escAttr(monthLabel(currentMonth))}"><g>${paths.join('')}</g><text x="${cx}" y="${cy-5}" text-anchor="middle" class="home-donut-center-total">${esc(centerValue)}</text><text x="${cx}" y="${cy+13}" text-anchor="middle" class="home-donut-center-label">${esc(centerName)}</text>${selected?`<text x="${cx}" y="${cy+29}" text-anchor="middle" class="home-donut-center-pct">${esc(centerPct)}</text>`:''}</svg></div>`;
+  return `<div class="home-donut-svg-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribución de gastos por categoría en ${escAttr(monthLabel(currentMonth))}"><g>${paths.join('')}</g><text x="${cx}" y="${cy-6}" text-anchor="middle" class="home-donut-center-total">${esc(centerValue)}</text><text x="${cx}" y="${cy+10}" text-anchor="middle" class="home-donut-center-label">${esc(centerName)}</text>${selected?`<text x="${cx}" y="${cy+25}" text-anchor="middle" class="home-donut-center-pct">${esc(centerPct)}</text>`:''}</svg></div>`;
 }
 
 let homeExpenseDonutSelected=-1;
@@ -1058,14 +1058,13 @@ function renderHomeExpenseCarousel(){
     }).join('');
 
     donut.innerHTML=
-      `<div class="home-donut-month-label">${esc(monthLabel(currentMonth))}</div>`+
       homeExpenseDonutSvg(rows,total,homeExpenseDonutSelected)+
       `<div class="home-donut-legend">${legend}</div>`+
       `<div class="home-donut-total-line"><span>Gastos totales</span><strong>${money(total)}</strong></div>`;
   }
 
   const title=$('#homeExpenseSlideTitle');
-  if(title)title.textContent=homeExpenseCarouselIndex===0?'Por categoría':'Distribución del mes';
+  if(title)title.textContent=homeExpenseCarouselIndex===0?`Por categoría · ${monthLabel(currentMonth)}`:`Distribución · ${monthLabel(currentMonth)}`;
   syncHomeExpenseCarouselUI(false);
 }
 
@@ -1082,7 +1081,7 @@ function syncHomeExpenseCarouselUI(animate=true){
     dot.setAttribute('aria-selected',active?'true':'false');
   });
   const title=$('#homeExpenseSlideTitle');
-  if(title)title.textContent=homeExpenseCarouselIndex===0?'Por categoría':'Distribución del mes';
+  if(title)title.textContent=homeExpenseCarouselIndex===0?`Por categoría · ${monthLabel(currentMonth)}`:`Distribución · ${monthLabel(currentMonth)}`;
 }
 
 function setHomeExpenseSlide(index,animate=true){

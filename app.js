@@ -966,7 +966,7 @@ function homeExpenseBarData(month=currentMonth){
 }
 
 function homeExpenseDonutSvg(rows,total,selectedIndex=-1){
-  const W=420,H=166,cx=210,cy=80,r=68,inner=38;
+  const W=420,H=205,cx=210,cy=102,r=91,inner=52;
 
   if(total<=0){
     return `<div class="home-donut-svg-wrap">
@@ -1172,6 +1172,15 @@ function bindHomeExpenseCarousel(){
   carousel.addEventListener('pointercancel',()=>{
     startX=startY=null;
     swiping=false;
+  });
+
+  // Los puntos están fuera de #homeExpenseCarousel, por eso tienen su propio click.
+  $$('.home-expense-dot').forEach(dot=>{
+    dot.addEventListener('click',e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      setHomeExpenseSlide(Number(dot.dataset.homeExpenseSlide),true);
+    });
   });
 
   carousel.addEventListener('click',e=>{
